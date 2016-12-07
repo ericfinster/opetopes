@@ -26,24 +26,24 @@ let rec is_valid_obj_nesting : 'a nesting -> bool =
   | Nd (_, Nd (n, Lf ())) -> is_valid_obj_nesting n
   | _ -> false
        
-type 'a canopy = 'a nesting tree
-type 'a nesting_ctxt = NstG of ('a * 'a nesting tree_deriv) list
-type 'a nesting_deriv = NstD of 'a canopy * 'a nesting_ctxt
-type 'a nesting_zipper = 'a nesting * 'a nesting_ctxt
+type 'a canopy = ('a, 'a) gtree_shell
+type 'a nesting_ctxt = ('a, 'a) gtree_ctxt
+type 'a nesting_deriv = ('a, 'a) gtree_deriv
+type 'a nesting_zipper = ('a, 'a) gtree_zipper
 
 let mk_nesting_zipper : 'a nesting -> 'a nesting_zipper =
-  fun n -> (n, NstG [])
+  fun n -> (n, TrG [])
          
 let rec plug_nesting_deriv : 'a. 'a nesting_deriv -> 'a -> 'a nesting =
   fun d a ->
   match d with
-    NstD (cn, g) -> close_nesting_ctxt g (Nd (a, cn))
+    TrD (cn, g) -> close_nesting_ctxt g (Nd (a, cn))
 
 and close_nesting_ctxt : 'a. 'a nesting_ctxt -> 'a nesting -> 'a nesting =
   fun g n ->
   match g with
-    NstG [] -> n
-  | NstG ((a,d)::gs) -> close_nesting_ctxt (NstG gs) (Nd (a, plug_tree_deriv d n))
+    TrG [] -> n
+  | TrG ((a,d)::gs) -> close_nesting_ctxt (TrG gs) (Nd (a, plug_tree_deriv d n))
                        
 module NestingZipperOps (M: MonadError with type e = string) = struct
 
@@ -66,10 +66,10 @@ module NestingZipperOps (M: MonadError with type e = string) = struct
     fun d z -> 
     match (z, d) with
       ((Lf _, _), _) -> throw "Encountered dot in nesting visit"
-    | ((Nd (a, cn), NstG ctxt), Dir ds) ->
+    | ((Nd (a, cn), TrG ctxt), Dir ds) ->
        T.seek_to ds cn >>= function
          (Lf (), _) -> throw "Encountered leaf in nesting visit"
-       | (Nd (n, sh), g) -> return (n, NstG ((a, TrD (sh, g)) :: ctxt))
+       | (Nd (n, sh), g) -> return (n, TrG ((a, TrD (sh, g)) :: ctxt))
 
   let rec seek : addr -> 'a nesting_zipper -> 'a nesting_zipper m =
     fun addr z ->
@@ -81,26 +81,26 @@ module NestingZipperOps (M: MonadError with type e = string) = struct
   let sibling : dir -> 'a nesting_zipper -> 'a nesting_zipper m =
     fun d z ->
     match (d, z) with
-      (_, (_, NstG [])) -> throw "No sibling in empty context"
-    | (Dir dir, (fcs, NstG ((a, TrD (vs, TrG hcn)) :: cs))) ->
+      (_, (_, TrG [])) -> throw "No sibling in empty context"
+    | (Dir dir, (fcs, TrG ((a, TrD (vs, TrG hcn)) :: cs))) ->
        T.seek_to dir vs >>= fun vzip ->
        match vzip with
          (Lf (), _) -> throw "Leaf in sibling"
        | (Nd (Lf (), _), _) -> throw "Leaf in sibling"
        | (Nd (Nd (nfcs, vrem), hmask), ctxt) ->
           let drv = TrD (vrem, TrG ((fcs, TrD (hmask, ctxt)) :: hcn))
-          in return (nfcs, NstG ((a, drv) :: cs))
+          in return (nfcs, TrG ((a, drv) :: cs))
        
   let parent : 'a nesting_zipper -> 'a nesting_zipper m =
     function
-      (fcs, NstG []) -> throw "No parent in empty context"
-    | (fcs, NstG ((a, d) :: cs)) -> return (Nd (a, plug_tree_deriv d fcs), NstG cs)
+      (fcs, TrG []) -> throw "No parent in empty context"
+    | (fcs, TrG ((a, d) :: cs)) -> return (Nd (a, plug_tree_deriv d fcs), TrG cs)
        
   let predecessor : 'a nesting_zipper -> 'a nesting_zipper m =
     function
-      (fcs, NstG ((a, TrD (verts, TrG ((pred, deriv) :: vs))) :: cs)) ->
+      (fcs, TrG ((a, TrD (verts, TrG ((pred, deriv) :: vs))) :: cs)) ->
       let drv = TrD (plug_tree_deriv deriv (Nd (fcs, verts)), TrG vs)
-      in return (pred, NstG ((a, drv) :: cs))
+      in return (pred, TrG ((a, drv) :: cs))
     | _ -> throw "No predecessor"
 
   let rec predecessor_which : ('a -> bool) -> 'a nesting_zipper -> 'a nesting_zipper m =

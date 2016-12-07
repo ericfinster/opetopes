@@ -6,9 +6,11 @@ open Applicative
 open Traverse
 open Monad
 
-type ('a, 'b) gtree = Lf of 'b | Nd of 'a * (('a, 'b) gtree, unit) gtree
-type 'a tree = ('a, unit) gtree
-type 'a tree_shell = 'a tree tree
+type ('a, 'b) gtree = Lf of 'b | Nd of 'a * ('a, 'b) gtree tree
+and 'a tree = ('a, unit) gtree
+
+type ('a, 'b) gtree_shell = ('a, 'b) gtree tree
+type 'a tree_shell = ('a, unit) gtree_shell
 
 let is_leaf t =
   match t with
@@ -20,21 +22,30 @@ let is_node t =
     Lf _ -> false
   | Nd (_, _) -> true 
 
+let rec gtree_map : 'a 'b 'c 'd. ('a -> 'b) -> ('c -> 'd) -> ('a, 'c) gtree -> ('b, 'd) gtree =
+  fun f g t -> match t with
+               Lf x -> Lf (g x)
+             | Nd (a, sh) -> Nd (f a, gtree_map (gtree_map f g) (fun _ -> ()) sh) 
+
 let rec tree_map : 'a 'b. ('a -> 'b) -> 'a tree -> 'b tree =
-  fun f t -> match t with
-               Lf x -> Lf x
-             | Nd (a, sh) -> Nd (f a, tree_map (tree_map f) sh) 
+  fun f t -> gtree_map f (fun _ -> ()) t
 
 let as_shell : 'a 'b. 'a tree -> 'b tree_shell =
   fun t -> tree_map (fun _ -> Lf ()) t
 
 (* Derivatives, Contexts, and Zippers *)
-type 'a tree_deriv = TrD of 'a tree_shell * 'a tree_ctxt
- and 'a tree_ctxt = TrG of ('a * 'a tree tree_deriv) list
+type ('a, 'b) gtree_deriv = TrD of ('a, 'b) gtree_shell * ('a, 'b) gtree_ctxt
+ and ('a, 'b) gtree_ctxt = TrG of ('a * (('a, 'b) gtree, unit) gtree_deriv) list
 
-type 'a lazy_deriv = 'a tree_deriv Lazy.t                         
-type 'a tree_zipper = 'a tree * 'a tree_ctxt
-                    
+type ('a, 'b) glazy_deriv = ('a, 'b) gtree_deriv Lazy.t
+type ('a, 'b) gtree_zipper = ('a, 'b) gtree * ('a, 'b) gtree_ctxt
+
+type 'a tree_deriv = ('a, unit) gtree_deriv
+type 'a tree_ctxt = ('a, unit) gtree_ctxt
+type 'a lazy_deriv = ('a, unit) glazy_deriv
+type 'a tree_zipper = ('a, unit) gtree_zipper
+
+
 let mk_deriv : 'a. 'a tree_shell -> 'a tree_deriv =
   fun sh -> TrD (sh, TrG [])
 
