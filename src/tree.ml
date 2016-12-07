@@ -45,20 +45,21 @@ type 'a tree_ctxt = ('a, unit) gtree_ctxt
 type 'a lazy_deriv = ('a, unit) glazy_deriv
 type 'a tree_zipper = ('a, unit) gtree_zipper
 
+let rec plug_tree_deriv : 'a 'b. ('a, 'b) gtree_deriv -> 'a -> ('a, 'b) gtree =
+  fun d a -> match d with
+               TrD (sh,g) -> close_tree_ctxt g (Nd (a, sh))
+and close_tree_ctxt : 'a 'b. ('a, 'b) gtree_ctxt -> ('a, 'b) gtree -> ('a, 'b) gtree =
+  fun c t -> match c with
+               TrG [] -> t
+             | TrG ((a,d)::gs) -> close_tree_ctxt (TrG gs) (Nd (a, plug_tree_deriv d t))
+
 
 let mk_deriv : 'a. 'a tree_shell -> 'a tree_deriv =
   fun sh -> TrD (sh, TrG [])
 
-let sh_deriv : 'a tree -> 'b tree_deriv =
+let sh_deriv : 'a 'b. 'a tree -> 'b tree_deriv =
   fun t -> mk_deriv (as_shell t)
          
-let rec plug_tree_deriv : 'a. 'a tree_deriv -> 'a -> 'a tree =
-  fun d a -> match d with
-               TrD (sh,g) -> close_tree_ctxt g (Nd (a, sh))
-and close_tree_ctxt : 'a. 'a tree_ctxt -> 'a tree -> 'a tree =
-  fun c t -> match c with
-               TrG [] -> t
-             | TrG ((a,d)::gs) -> close_tree_ctxt (TrG gs) (Nd (a, plug_tree_deriv d t))
                      
 (* Tree Addresses *)
 type dir = Dir of dir list
@@ -68,30 +69,30 @@ module TreeZipperOps (M: MonadError with type e = string) = struct
 
   open M
 
-  let focus_of : 'a tree_zipper -> 'a tree =
+  let focus_of : 'a 'b. ('a, 'b) gtree_zipper -> ('a, 'b) gtree =
     function (fcs, _) -> fcs
 
-  let ctxt_of : 'a tree_zipper -> ('a * 'a tree tree_deriv) list =
+  let ctxt_of : 'a 'b. ('a, 'b) gtree_zipper -> ('a * (('a, 'b) gtree, unit) gtree_deriv) list =
     function (_, TrG g) -> g
                 
-  let mk_zipper : 'a tree -> 'a tree_zipper =
+  let mk_zipper : 'a 'b. ('a, 'b) gtree -> ('a, 'b) gtree_zipper =
     fun t -> (t, TrG [])
     
-  let close : 'a tree_zipper -> 'a tree =
+  let close : 'a 'b. ('a, 'b) gtree_zipper -> ('a, 'b) gtree =
     function (fcs, ctxt) -> close_tree_ctxt ctxt fcs
 
-  let close_with : 'a tree -> 'a tree_zipper -> 'a tree =
+  let close_with : 'a 'b. ('a, 'b) gtree -> ('a, 'b) gtree_zipper -> ('a, 'b) gtree =
     fun t z ->
     match z with
       (_, ctxt) -> close_tree_ctxt ctxt t
 
-  let predecessor : 'a tree_zipper -> 'a tree_zipper m =
+  let predecessor : 'a 'b. ('a, 'b) gtree_zipper -> ('a, 'b) gtree_zipper m =
     function
       (fcs, TrG []) -> throw "Zipper has no predecessor"
     | (fcs, TrG ((a, TrD(ts,g))::gs)) ->
        return (Nd (a, close_tree_ctxt g (Nd (fcs, ts))), TrG gs)
                                     
-  let rec predecessor_which : ('a -> bool) -> 'a tree_zipper -> 'a tree_zipper m =
+  let rec predecessor_which : 'a 'b. ('a -> bool) -> ('a, 'b) gtree_zipper -> ('a, 'b) gtree_zipper m =
     fun p z ->
     match z with
       (fcs, TrG []) -> throw "Zipper has no predecessor"
@@ -99,17 +100,17 @@ module TreeZipperOps (M: MonadError with type e = string) = struct
        let pz = (Nd (a, close_tree_ctxt g (Nd (fcs, ts))), TrG gs)
        in if (p a) then return pz else predecessor_which p pz
 
-  let rec visit : 'a. dir -> 'a tree_zipper -> 'a tree_zipper m =
+  let rec visit : 'a 'b. dir -> ('a, 'b) gtree_zipper -> ('a, 'b) gtree_zipper m =
     fun d z ->
     match (focus_of z, d) with
-      (Lf (), _) -> throw "Cannot visit a leaf"
+      (Lf _, _) -> throw "Cannot visit a leaf"
     | (Nd (a, sh), Dir ds) ->
        seek ds (mk_zipper sh) >>= function
          (Lf (), _) -> throw "Leaf during visit"
        | (Nd (t, ts), g) ->
           return (t, TrG ((a, TrD(ts, g)) :: ctxt_of z))
 
-  and seek : 'a. addr -> 'a tree_zipper -> 'a tree_zipper m =
+  and seek : 'a 'b. addr -> ('a, 'b) gtree_zipper -> ('a, 'b) gtree_zipper m =
     fun a z ->
     match a with
       [] -> return z
@@ -117,6 +118,24 @@ module TreeZipperOps (M: MonadError with type e = string) = struct
        seek ds z >>= fun zz ->
        visit d zz
 
+  let sibling : dir -> ('a, 'b) gtree_zipper -> ('a, 'b) gtree_zipper m =
+    fun d z ->
+    match (d, z) with
+      (_, (_, TrG [])) -> throw "No sibling in empty context"
+    | (Dir dir, (fcs, TrG ((a, TrD (vs, TrG hcn)) :: cs))) ->
+       seek dir (mk_zipper vs) >>= fun vzip ->
+       match vzip with
+         (Lf (), _) -> throw "Leaf in sibling"
+       | (Nd (Lf (), _), _) -> throw "Leaf in sibling"
+       | (Nd (Nd (nfcs, vrem), hmask), ctxt) ->
+          let drv = TrD (vrem, TrG ((fcs, TrD (hmask, ctxt)) :: hcn))
+          in return (nfcs, TrG ((a, drv) :: cs))
+
+  let parent : ('a, 'b) gtree_zipper -> ('a, 'b) gtree_zipper m =
+    function
+      (fcs, TrG []) -> throw "No parent in empty context"
+    | (fcs, TrG ((a, d) :: cs)) -> return (Nd (a, plug_tree_deriv d fcs), TrG cs)
+       
 end
 
 module TraverseImpl (A : Applicative) : LocalBase

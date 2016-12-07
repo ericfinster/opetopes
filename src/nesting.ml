@@ -33,68 +33,13 @@ type 'a nesting_zipper = ('a, 'a) gtree_zipper
 
 let mk_nesting_zipper : 'a nesting -> 'a nesting_zipper =
   fun n -> (n, TrG [])
-         
-let rec plug_nesting_deriv : 'a. 'a nesting_deriv -> 'a -> 'a nesting =
-  fun d a ->
-  match d with
-    TrD (cn, g) -> close_nesting_ctxt g (Nd (a, cn))
 
-and close_nesting_ctxt : 'a. 'a nesting_ctxt -> 'a nesting -> 'a nesting =
-  fun g n ->
-  match g with
-    TrG [] -> n
-  | TrG ((a,d)::gs) -> close_nesting_ctxt (TrG gs) (Nd (a, plug_tree_deriv d n))
-                       
 module NestingZipperOps (M: MonadError with type e = string) = struct
 
   open M
   module TZ = TreeZipperOps(M)
   module T = TreeOps(M)
             
-  let focus_of : 'a nesting_zipper -> 'a nesting =
-    function (fcs, _) -> fcs
-           
-  let close : 'a nesting_zipper -> 'a nesting =
-    function (fcs, g) -> close_nesting_ctxt g fcs
-
-  let close_with : 'a nesting -> 'a nesting_zipper -> 'a nesting =
-    fun n z ->
-    match z with
-      (_, g) -> close_nesting_ctxt g n
-
-  let visit : dir -> 'a nesting_zipper -> 'a nesting_zipper m =
-    fun d z -> 
-    match (z, d) with
-      ((Lf _, _), _) -> throw "Encountered dot in nesting visit"
-    | ((Nd (a, cn), TrG ctxt), Dir ds) ->
-       T.seek_to ds cn >>= function
-         (Lf (), _) -> throw "Encountered leaf in nesting visit"
-       | (Nd (n, sh), g) -> return (n, TrG ((a, TrD (sh, g)) :: ctxt))
-
-  let rec seek : addr -> 'a nesting_zipper -> 'a nesting_zipper m =
-    fun addr z ->
-    match addr with
-      [] -> return z
-    | d :: ds -> seek ds z >>= fun zz ->
-                 visit d zz 
-
-  let sibling : dir -> 'a nesting_zipper -> 'a nesting_zipper m =
-    fun d z ->
-    match (d, z) with
-      (_, (_, TrG [])) -> throw "No sibling in empty context"
-    | (Dir dir, (fcs, TrG ((a, TrD (vs, TrG hcn)) :: cs))) ->
-       T.seek_to dir vs >>= fun vzip ->
-       match vzip with
-         (Lf (), _) -> throw "Leaf in sibling"
-       | (Nd (Lf (), _), _) -> throw "Leaf in sibling"
-       | (Nd (Nd (nfcs, vrem), hmask), ctxt) ->
-          let drv = TrD (vrem, TrG ((fcs, TrD (hmask, ctxt)) :: hcn))
-          in return (nfcs, TrG ((a, drv) :: cs))
-       
-  let parent : 'a nesting_zipper -> 'a nesting_zipper m =
-    function
-      (fcs, TrG []) -> throw "No parent in empty context"
-    | (fcs, TrG ((a, d) :: cs)) -> return (Nd (a, plug_tree_deriv d fcs), TrG cs)
        
   let predecessor : 'a nesting_zipper -> 'a nesting_zipper m =
     function
@@ -104,7 +49,7 @@ module NestingZipperOps (M: MonadError with type e = string) = struct
     | _ -> throw "No predecessor"
 
   let rec predecessor_which : ('a -> bool) -> 'a nesting_zipper -> 'a nesting_zipper m =
-    fun f z -> if (f (base_value (focus_of z)))
+    fun f z -> if (f (base_value (TZ.focus_of z)))
                then return z
                else predecessor z >>= predecessor_which f 
               
