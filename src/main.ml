@@ -6,7 +6,7 @@ open Tree
 open Nesting
 open Cmplx
    
-let test = Lf ;;   
+let test = Lf () ;;   
 
 let () = Printf.printf "Hello, world!\n";;
 
