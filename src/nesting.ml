@@ -6,26 +6,24 @@ open Tree
 open Monad
 open Traverse
 open Applicative
-   
-type 'a nesting =
-  Dot of 'a
-| Box of 'a * 'a nesting tree
+
+type 'a nesting = ('a, 'a) gtree
 
 let base_value : 'a nesting -> 'a =
   function
-    Dot a -> a
-  | Box (a, _) -> a
+    Lf a -> a
+  | Nd (a, _) -> a
 
 let with_base : 'a -> 'a nesting -> 'a nesting =
   fun a n ->
   match n with
-    Dot _ -> Dot a
-  | Box (_, cn) -> Box (a, cn)
+    Lf _ -> Lf a
+  | Nd (_, cn) -> Nd (a, cn)
 
 let rec is_valid_obj_nesting : 'a nesting -> bool =
   function
-    Dot _ -> true
-  | Box (_, Nd (n, Lf)) -> is_valid_obj_nesting n
+    Lf _ -> true
+  | Nd (_, Nd (n, Lf ())) -> is_valid_obj_nesting n
   | _ -> false
        
 type 'a canopy = 'a nesting tree
@@ -39,13 +37,13 @@ let mk_nesting_zipper : 'a nesting -> 'a nesting_zipper =
 let rec plug_nesting_deriv : 'a. 'a nesting_deriv -> 'a -> 'a nesting =
   fun d a ->
   match d with
-    NstD (cn, g) -> close_nesting_ctxt g (Box (a, cn))
+    NstD (cn, g) -> close_nesting_ctxt g (Nd (a, cn))
 
 and close_nesting_ctxt : 'a. 'a nesting_ctxt -> 'a nesting -> 'a nesting =
   fun g n ->
   match g with
     NstG [] -> n
-  | NstG ((a,d)::gs) -> close_nesting_ctxt (NstG gs) (Box (a, plug_tree_deriv d n))
+  | NstG ((a,d)::gs) -> close_nesting_ctxt (NstG gs) (Nd (a, plug_tree_deriv d n))
                        
 module NestingZipperOps (M: MonadError with type e = string) = struct
 
@@ -67,10 +65,10 @@ module NestingZipperOps (M: MonadError with type e = string) = struct
   let visit : dir -> 'a nesting_zipper -> 'a nesting_zipper m =
     fun d z -> 
     match (z, d) with
-      ((Dot _, _), _) -> throw "Encountered dot in nesting visit"
-    | ((Box (a, cn), NstG ctxt), Dir ds) ->
+      ((Lf _, _), _) -> throw "Encountered dot in nesting visit"
+    | ((Nd (a, cn), NstG ctxt), Dir ds) ->
        T.seek_to ds cn >>= function
-         (Lf, _) -> throw "Encountered leaf in nesting visit"
+         (Lf (), _) -> throw "Encountered leaf in nesting visit"
        | (Nd (n, sh), g) -> return (n, NstG ((a, TrD (sh, g)) :: ctxt))
 
   let rec seek : addr -> 'a nesting_zipper -> 'a nesting_zipper m =
@@ -87,8 +85,8 @@ module NestingZipperOps (M: MonadError with type e = string) = struct
     | (Dir dir, (fcs, NstG ((a, TrD (vs, TrG hcn)) :: cs))) ->
        T.seek_to dir vs >>= fun vzip ->
        match vzip with
-         (Lf, _) -> throw "Leaf in sibling"
-       | (Nd (Lf, _), _) -> throw "Leaf in sibling"
+         (Lf (), _) -> throw "Leaf in sibling"
+       | (Nd (Lf (), _), _) -> throw "Leaf in sibling"
        | (Nd (Nd (nfcs, vrem), hmask), ctxt) ->
           let drv = TrD (vrem, TrG ((fcs, TrD (hmask, ctxt)) :: hcn))
           in return (nfcs, NstG ((a, drv) :: cs))
@@ -96,7 +94,7 @@ module NestingZipperOps (M: MonadError with type e = string) = struct
   let parent : 'a nesting_zipper -> 'a nesting_zipper m =
     function
       (fcs, NstG []) -> throw "No parent in empty context"
-    | (fcs, NstG ((a, d) :: cs)) -> return (Box (a, plug_tree_deriv d fcs), NstG cs)
+    | (fcs, NstG ((a, d) :: cs)) -> return (Nd (a, plug_tree_deriv d fcs), NstG cs)
        
   let predecessor : 'a nesting_zipper -> 'a nesting_zipper m =
     function
@@ -130,14 +128,14 @@ module NestingTraverseImpl (A : Applicative) : LocalBase
   type la = addr Lazy.t
   type 'a ld = 'a tree_deriv Lazy.t
 
-  let mkDot a = Dot a
-  let mkBox a cn = Box (a, cn)
+  let mkDot a = Lf a
+  let mkBox a cn = Nd (a, cn)
                  
   let rec lazy_traverse_impl : 'a 'b 'c. la -> 'b ld -> ('a -> la -> 'b ld -> 'c m) -> 'a t -> 'c t m =
     fun ba bd f n ->
     match n with
-      Dot a -> mkDot <$> (f a ba bd)
-    | Box (a, cn) -> let r = f a ba bd in
+      Lf a -> mkDot <$> (f a ba bd)
+    | Nd (a, cn) -> let r = f a ba bd in
                      let f' nn la ld =
                        let lla = lazy ((Dir (Lazy.force la)) :: (Lazy.force ba))
                        in lazy_traverse_impl lla ld f n in
@@ -145,7 +143,7 @@ module NestingTraverseImpl (A : Applicative) : LocalBase
                      in mkBox <$> r <*> rc
 
   let lazy_traverse : 'a 'b 'c. ('a -> la -> 'b ld -> 'c m) -> 'a t -> 'c t m =
-    fun f t -> lazy_traverse_impl (lazy []) (lazy (mk_deriv (Nd (Lf, Lf)))) f t
+    fun f t -> lazy_traverse_impl (lazy []) (lazy (mk_deriv (Nd (Lf (), Lf ())))) f t
 
 end
 
@@ -181,17 +179,17 @@ module NestingMatchImpl (M : MonadError with type e = string)
   let rec lazy_match_impl : 'a 'b 'c 'd. la -> 'c ld -> ('a -> 'b -> la -> 'c ld -> 'd m) -> 'a t -> 'b t -> 'd t m =
     fun la ld f m n ->
     match (m, n) with
-      (Dot a, Dot b) -> f a b la ld >>= fun d -> return (Dot d)
-    | (Box (a, acn), Box (b, bcn)) -> 
+      (Lf a, Lf b) -> f a b la ld >>= fun d -> return (Lf d)
+    | (Nd (a, acn), Nd (b, bcn)) -> 
        let f' mm nn dir drv = let lla = lazy ((Dir (Lazy.force dir)) :: (Lazy.force la))
                               in lazy_match_impl lla drv f mm nn
        in TM.lazy_match f' acn bcn >>= fun dcn ->
           f a b la ld >>= fun d ->
-          return (Box (d, dcn))
+          return (Nd (d, dcn))
     | _ -> throw "Mismatch in nesting"
 
   let lazy_match : ('a -> 'b -> ta Lazy.t -> 'c td Lazy.t -> 'd m) -> 'a t -> 'b t -> 'd t m =
-    fun f s t -> lazy_match_impl (lazy []) (lazy (mk_deriv (Nd (Lf, Lf)))) f s t
+    fun f s t -> lazy_match_impl (lazy []) (lazy (mk_deriv (Nd (Lf (), Lf ())))) f s t
 
 end
 
@@ -210,30 +208,30 @@ module NestingOps (M: MonadError with type e = string) = struct
 
   let as_dot : 'a nesting -> 'a m = 
     function
-      Dot a -> return a
+      Lf a -> return a
     | _ -> throw "Not a dot"
 
   let as_box : 'a nesting -> ('a * 'a canopy) m =
     function
-      Box (a, cn) -> return (a, cn)
+      Nd (a, cn) -> return (a, cn)
     | _ -> throw "Not a box"
 
   let rec fold_nesting : ('a -> 'b) -> ('a -> 'b tree -> 'b) -> 'a nesting -> 'b =
     fun dr br n ->
     match n with
-      Dot a -> dr a
-    | Box (a, cn) -> br a (TT.map (fold_nesting dr br) cn)
+      Lf a -> dr a
+    | Nd (a, cn) -> br a (TT.map (fold_nesting dr br) cn)
 
   let to_tree : 'a nesting -> 'a tree = 
-    fun n -> fold_nesting (fun _ -> Lf) (fun a sh -> Nd (a, sh)) n
+    fun n -> fold_nesting (fun _ -> Lf ()) (fun a sh -> Nd (a, sh)) n
 
   type 'a ldm = 'a tree_deriv m Lazy.t
               
   let rec spine : 'a ldm -> 'a nesting -> 'a tree m =
     fun ldm n ->
     match n with
-      Dot a -> Lazy.force ldm >>= fun d -> return (plug_tree_deriv d a)
-    | Box (a, cn) -> canopy_spine cn
+      Lf a -> Lazy.force ldm >>= fun d -> return (plug_tree_deriv d a)
+    | Nd (a, cn) -> canopy_spine cn
   and canopy_spine : 'a canopy -> 'a tree m =
     fun cn -> let f nst _ drv = spine (lazy (return (Lazy.force drv))) nst 
               in TT.lazy_traverse f cn >>= T.tree_join
@@ -241,16 +239,16 @@ module NestingOps (M: MonadError with type e = string) = struct
   let rec total_canopy : 'a nesting ldm -> 'a nesting -> 'a canopy m =
     fun ldm n ->
     match n with
-      Dot a -> Lazy.force ldm >>= fun d -> return (plug_tree_deriv d (Dot a))
-    | Box (a, cn) ->
+      Lf a -> Lazy.force ldm >>= fun d -> return (plug_tree_deriv d (Lf a))
+    | Nd (a, cn) ->
        let f nst _ drv = total_canopy (lazy (return (Lazy.force drv))) nst
        in TT.lazy_traverse f cn >>= T.tree_join
                    
   let rec canopy_with_guide : 'b tree -> 'a nesting ldm -> 'a nesting -> 'a canopy m =
     fun g ldm n ->
     match (n, g) with
-      (_, Lf) -> Lazy.force ldm >>= fun d -> return (plug_tree_deriv d n)
-    | (Box (_, cn), Nd (_, sh)) ->
+      (_, Lf ()) -> Lazy.force ldm >>= fun d -> return (plug_tree_deriv d n)
+    | (Nd (_, cn), Nd (_, sh)) ->
        let f nn gg _ dd = canopy_with_guide gg (lazy (return (Lazy.force dd))) nn
        in TM.lazy_match f cn sh >>= T.tree_join
     | _ -> throw "Bad canopy"
@@ -258,29 +256,29 @@ module NestingOps (M: MonadError with type e = string) = struct
   let rec excise_with : 'b tree -> 'a nesting ldm -> 'a nesting -> ('a nesting * 'a canopy) m =
     fun g ldm n ->
     match (n, g) with
-      (_, Lf) -> let v = base_value n
+      (_, Lf ()) -> let v = base_value n
                  in total_canopy ldm n >>= fun cn ->
                     Lazy.force ldm >>= fun d -> 
-                    return (Dot v, plug_tree_deriv d (Box (v, cn)))
-    | (Box (a, cn), Nd (_, sh)) ->
+                    return (Lf v, plug_tree_deriv d (Nd (v, cn)))
+    | (Nd (a, cn), Nd (_, sh)) ->
        let f nn tt _ dd = excise_with tt (lazy (return (Lazy.force dd))) nn
        in TM.lazy_match f cn sh >>= fun p ->
           let (ncn, toJn) = T.tree_unzip p
           in T.tree_join toJn >>= fun jn ->
-             return (Box (a, ncn), jn)
+             return (Nd (a, ncn), jn)
     | _ -> throw "Error during excision"
          
   let rec compress_with : 'b tree_shell -> 'a nesting ldm -> 'a nesting -> 'a nesting m =
     fun s ldm n ->
     match s with
-      Nd (Lf, sh) -> T.root_value sh >>= fun r ->
+      Nd (Lf (), sh) -> T.root_value sh >>= fun r ->
                      compress_with r ldm n >>= fun nn ->
                      Lazy.force ldm >>= fun d -> 
-                     return (Box (base_value n, plug_tree_deriv d nn))
+                     return (Nd (base_value n, plug_tree_deriv d nn))
     | Nd (sk, sh) -> canopy_with_guide sk ldm n >>= fun cn ->
                      let f nn gg _ dd = compress_with gg (lazy (return (Lazy.force dd))) nn
                      in TM.lazy_match f cn sh >>= fun rn ->
-                        return (Box (base_value n, rn))
-    | Lf -> return n
+                        return (Nd (base_value n, rn))
+    | Lf () -> return n
          
 end

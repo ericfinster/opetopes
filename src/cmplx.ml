@@ -64,9 +64,9 @@ module ComplexZipperOps (M: MonadError with type e = string) = struct
       [] -> throw "No derivative for empty zipper"
     | (fcs, ctx) :: zs ->
        match fcs with
-         Dot _ -> focus_canopy zs >>= fun tc ->
+         Lf _ -> focus_canopy zs >>= fun tc ->
                   return (sh_deriv tc)
-       | Box (_, cn) -> N.canopy_spine cn >>= fun sp ->
+       | Nd (_, cn) -> N.canopy_spine cn >>= fun sp ->
                         focus zs >>= fun fc ->
                         N.canopy_with_guide sp (lazy (focus_deriv zs)) fc >>= fun dsh ->
                         return (sh_deriv dsh)
@@ -74,28 +74,28 @@ module ComplexZipperOps (M: MonadError with type e = string) = struct
   and focus_canopy : 'a. 'a complex_zipper -> 'a canopy m =
     function
       [] -> throw "No canopy for empty zipper"
-    | (Dot _, _) :: zs -> throw "No canopy for dot"
-    | (Box (_, cn), _) :: zs -> return cn
+    | (Lf _, _) :: zs -> throw "No canopy for dot"
+    | (Nd (_, cn), _) :: zs -> return cn
 
   let focus_spine : 'a. 'a complex_zipper -> 'a tree m =
     fun z -> 
     match z with 
       [] -> throw "No spine for empty zipper"
-    | (Dot a, _) :: _ -> focus_deriv z >>= fun d ->
+    | (Lf a, _) :: _ -> focus_deriv z >>= fun d ->
                          return (plug_tree_deriv d a)
-    | (Box (a, cn), _) :: _ -> N.canopy_spine cn
+    | (Nd (a, cn), _) :: _ -> N.canopy_spine cn
 
   let rec extract : 'a 'b. 'b tree -> 'a complex_zipper -> 'a complex m =
     fun g z ->
     match z with
       [] -> throw "Cannot extract from empty zipper"
     | [(fcs, ctx)] -> let f (n, _) = return [n]
-                      in N.excise_with g (lazy (return (mk_deriv Lf))) fcs >>= f
+                      in N.excise_with g (lazy (return (mk_deriv (Lf ())))) fcs >>= f
     | (fcs, ctx) :: zs ->
        N.excise_with g (lazy (focus_deriv z)) fcs >>= function
          (excised, boxTr) -> let s = function
-                                 Dot a -> (a, Lf)
-                               | Box (a, cn) -> (a, cn) in
+                                 Lf a -> (a, Lf ())
+                               | Nd (a, cn) -> (a, cn) in
                              let (localSpine, compressor) = T.split_with s boxTr
                              in T.tree_join compressor >>= fun sp ->
                                 extract sp zs >>= fun c ->
@@ -116,7 +116,7 @@ module ComplexZipperOps (M: MonadError with type e = string) = struct
              [] -> throw "Empty complex in face calculation"
            | ch :: ct -> let ld = lazy (focus_deriv (mk_complex_zipper c)) in
                          N.compress_with (plug_tree_deriv d sp) ld ch >>= fun nh ->
-                         return ((Dot (base_value fcs)) :: nh :: ct)
+                         return ((Lf (base_value fcs)) :: nh :: ct)
        
 end
                                                              
@@ -130,9 +130,9 @@ module ComplexOps (M : MonadError with type e = string) = struct
            
   let rec check_bonds : 'a complex -> ('a tree * 'a tree_deriv) m =
     function
-      [] -> return (Lf, mk_deriv Lf)  (* Dummy *)
+      [] -> return (Lf (), mk_deriv (Lf ()))  (* Dummy *)
     | [objs] -> if (is_valid_obj_nesting objs)
-                then return (N.to_tree objs, mk_deriv (Nd (Lf, Lf)))
+                then return (N.to_tree objs, mk_deriv (Nd (Lf (), Lf ())))
                 else throw "Object nesting is not linear"
     | n :: ns -> check_bonds ns >>= function
                    (t, d) -> N.spine (lazy (return d)) n >>= fun sp ->
@@ -145,7 +145,7 @@ module ComplexOps (M : MonadError with type e = string) = struct
 
   let is_opetope : 'a complex -> bool m =
     fun c -> match c with
-             | (Dot _) :: ns -> is_bonded c
+             | (Lf _) :: ns -> is_bonded c
              | _ ->  return false
     
 end
