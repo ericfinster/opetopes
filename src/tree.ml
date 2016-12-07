@@ -145,6 +145,9 @@ module TraverseImpl (A : Applicative) : LocalBase
        with type 'a td = 'a tree_deriv = 
 struct
 
+  (* XXX: after generalizing [LocalBase], one could write a generic
+  traverse for [gtree] and, therefore [tree] and [nesting] *)
+
   open A
 
   type 'a t = 'a tree
@@ -192,7 +195,10 @@ module TreeMatchImpl (M : MonadError with type e = string)
        with type 'a m = 'a M.m
        with type ta = addr
        with type 'a td = 'a tree_deriv = struct
-                   
+
+  (* XXX: after generalizing [MatchBase], one could write a generic
+  traverse for [gtree] and, therefore [tree] and [nesting] *)
+
   open M
                                   
   type 'a t = 'a tree
@@ -237,14 +243,14 @@ module TreeOps (M: MonadError with type e = string) = struct
 
   module TM = TreeMatch(M)
      
-  let as_leaf : 'a tree -> unit m =
+  let as_leaf : 'a 'b. ('a, 'b) gtree -> 'b m =
     function
-      Lf () -> return ()
+      Lf a -> return a
     | Nd (_, _) -> throw "Leaf force failed"
 
-  let as_node : 'a tree -> ('a * 'a tree_shell) m =
+  let as_node : 'a 'b. ('a, 'b) gtree -> ('a * ('a, 'b) gtree_shell) m =
     function
-      Lf () -> throw "Node force failed"
+      Lf _ -> throw "Node force failed"
     | Nd (a, sh) -> return (a, sh)
 
   let root_value : 'a tree -> 'a m =

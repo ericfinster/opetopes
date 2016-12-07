@@ -39,7 +39,6 @@ module NestingZipperOps (M: MonadError with type e = string) = struct
   open M
   module TZ = TreeZipperOps(M)
   module T = TreeOps(M)
-            
        
   let predecessor : 'a nesting_zipper -> 'a nesting_zipper m =
     function
@@ -62,6 +61,9 @@ module NestingTraverseImpl (A : Applicative) : LocalBase
        with type 'a td = 'a tree_deriv = struct
     
   open A
+
+  (* XXX: after generalizing [LocalBase], one could write a generic
+  traverse for [gtree] and, therefore [tree] and [nesting] *)
 
   module T = TreeTraverse(A)
      
@@ -109,6 +111,9 @@ module NestingMatchImpl (M : MonadError with type e = string)
        with type 'a m = 'a M.m
        with type ta = addr
        with type 'a td = 'a tree_deriv = struct
+
+  (* XXX: after generalizing [MatchBase], one could write a generic
+  traverse for [gtree] and, therefore [tree] and [nesting] *)
                    
   open M
   module TM = TreeMatch(M)
@@ -151,24 +156,11 @@ module NestingOps (M: MonadError with type e = string) = struct
   module TM = TreeMatch(M)
   module T = TreeOps(M)
 
-  let as_dot : 'a nesting -> 'a m = 
-    function
-      Lf a -> return a
-    | _ -> throw "Not a dot"
-
-  let as_box : 'a nesting -> ('a * 'a canopy) m =
-    function
-      Nd (a, cn) -> return (a, cn)
-    | _ -> throw "Not a box"
-
-  let rec fold_nesting : ('a -> 'b) -> ('a -> 'b tree -> 'b) -> 'a nesting -> 'b =
-    fun dr br n ->
-    match n with
-      Lf a -> dr a
-    | Nd (a, cn) -> br a (TT.map (fold_nesting dr br) cn)
+  let as_dot : 'a. 'a nesting -> 'a m = T.as_leaf
+  let as_box : 'a. 'a nesting -> ('a * 'a canopy) m = T.as_node
 
   let to_tree : 'a nesting -> 'a tree = 
-    fun n -> fold_nesting (fun _ -> Lf ()) (fun a sh -> Nd (a, sh)) n
+    fun n -> gtree_map (fun a -> a) (fun _ -> ()) n
 
   type 'a ldm = 'a tree_deriv m Lazy.t
               
