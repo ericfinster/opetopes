@@ -62,8 +62,8 @@ let map_nst (n : 'a nst) ~f:(f : 'a -> 'b) : 'b nst =
 
 module IdtZipper = struct
 
-  type ('a, 'b) idt_deriv = TrD of ('a, 'b) idt_shell * ('a, 'b) idt_ctxt
-  and ('a, 'b) idt_ctxt = TrG of ('a * (('a, 'b) idt, unit) idt_deriv) list
+  type ('a, 'b) idt_deriv = IdtD of ('a, 'b) idt_shell * ('a, 'b) idt_ctxt
+  and ('a, 'b) idt_ctxt = IdtG of ('a * (('a, 'b) idt, unit) idt_deriv) list
 
   type ('a, 'b) idt_lazy_deriv = ('a, 'b) idt_deriv Lazy.t
   type ('a, 'b) idt_zipper = ('a, 'b) idt * ('a, 'b) idt_ctxt
@@ -73,44 +73,47 @@ module IdtZipper = struct
   type 'a tr_lazy_deriv = ('a, unit) idt_lazy_deriv
   type 'a tr_zipper = ('a, unit) idt_zipper
   
-  (* let rec plug_tree_deriv : 'a 'b. ('a, 'b) gtree_deriv -> 'a -> ('a, 'b) gtree =
-   *   fun d a -> match d with
-   *       TrD (sh,g) -> close_tree_ctxt g (Nd (a, sh))
-   * and close_tree_ctxt : 'a 'b. ('a, 'b) gtree_ctxt -> ('a, 'b) gtree -> ('a, 'b) gtree =
-   *   fun c t -> match c with
-   *       TrG [] -> t
-   *     | TrG ((a,d)::gs) -> close_tree_ctxt (TrG gs) (Nd (a, plug_tree_deriv d t))
-   * 
-   * 
-   * let mk_deriv : 'a. 'a tree_shell -> 'a tree_deriv =
-   *   fun sh -> TrD (sh, TrG [])
-   * 
-   * let sh_deriv : 'a 'b. 'a tree -> 'b tree_deriv =
-   *   fun t -> mk_deriv (as_shell t) *)
+  let rec plug_idt_deriv : 'a 'b. ('a, 'b) idt_deriv -> 'a -> ('a, 'b) idt =
+    fun d a ->
+    match d with
+    | IdtD (sh,gma) -> close_idt_ctxt gma (Nd (a, sh))
+
+  and close_idt_ctxt : 'a 'b. ('a, 'b) idt_ctxt -> ('a, 'b) idt -> ('a, 'b) idt =
+    fun gma tr ->
+    match gma with
+    | IdtG [] -> tr
+    | IdtG ((a,d)::gs) ->
+      close_idt_ctxt (IdtG gs) (Nd (a, plug_idt_deriv d tr))
+
+  let mk_deriv : 'a 'b. ('a , 'b) idt_shell -> ('a , 'b) idt_deriv =
+    fun sh -> IdtD (sh, IdtG [])
 
 end
-
-
 
 (*****************************************************************************)
 (*                     Utils for Encoding Lists and Trees                    *)
 (*****************************************************************************)
-            
-let rec of_list (l : 'a list) : 'a tr =
-  match l with
-  | [] -> Lf ()
-  | x::xs ->
-    Nd (x,Nd(of_list xs,Lf ()))
 
-(* planar trees *)
-type 'a planar_tr =
-  | Leaf
-  | Node of ('a * 'a planar_tr list)
+module IdtConv = struct
 
-let rec of_planar_tr (p : 'a planar_tr) : 'a tr =
-  match p with
-  | Leaf -> Lf ()
-  | Node (x,brs) ->
-    let trs = List.map brs ~f:of_planar_tr in 
-    Nd (x, of_list trs)
+  (** lists as linear trees *)
+  let rec of_list (l : 'a list) : 'a tr =
+    match l with
+    | [] -> Lf ()
+    | x::xs ->
+      Nd (x,Nd(of_list xs,Lf ()))
 
+  (* planar trees *)
+  type 'a planar_tr =
+    | Leaf
+    | Node of ('a * 'a planar_tr list)
+
+  (** encode planar trees *)
+  let rec of_planar_tr (p : 'a planar_tr) : 'a tr =
+    match p with
+    | Leaf -> Lf ()
+    | Node (x,brs) ->
+      let trs = List.map brs ~f:of_planar_tr in 
+      Nd (x, of_list trs)
+
+end
