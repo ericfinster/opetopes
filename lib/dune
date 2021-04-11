@@ -1,0 +1,7 @@
+(library
+ (name opetopes)
+ (public_name opetopes)
+ (synopsis "Opetopes in Ocaml")
+ (libraries base)
+ (preprocess (pps ppx_sexp_conv)))
+ 

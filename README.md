@@ -1,2 +1,3 @@
-# ocaml-opetopes
-Opetopes in ocaml
+# opetopes
+
+An implementation of opetopes in ocaml

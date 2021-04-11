@@ -1,0 +1,17 @@
+opam-version: "2.0"
+maintainer: "ericfinster@gmail.com"
+authors: ["Eric Finster"]
+homepage: "https://github.com/ericfinster/opetopes"
+bug-reports: "https://github.com/ericfinster/opetopes/issues"
+dev-repo: "https://github.com/ericfinster/opetopes.git"
+
+build: [
+  ["dune" "subst"] {pinned}
+  ["dune" "build" "-p" name "-j" jobs]
+]
+
+build-test: ["dune" "runtest" "-p" name]
+
+depends: [
+  "dune" {build}
+]
