@@ -19,6 +19,10 @@ type 'a nst = ('a , 'a) idt
 type ('a, 'b) idt_shell = ('a, 'b) idt tr
 type 'a tr_shell = ('a, unit) idt_shell
 
+(** Directions and Addresses *)
+type dir = Dir of addr
+and addr = dir list
+
 let corolla : 'a. 'a -> 'a tr =
   fun a -> Nd (a, Lf ()) 
 
@@ -72,7 +76,9 @@ module IdtZipper = struct
   type 'a tr_ctxt = ('a, unit) idt_ctxt
   type 'a tr_lazy_deriv = ('a, unit) idt_lazy_deriv
   type 'a tr_zipper = ('a, unit) idt_zipper
-  
+
+  exception ZipperError of string
+      
   let rec plug_idt_deriv : 'a 'b. ('a, 'b) idt_deriv -> 'a -> ('a, 'b) idt =
     fun d a ->
     match d with
@@ -88,6 +94,59 @@ module IdtZipper = struct
   let mk_deriv : 'a 'b. ('a , 'b) idt_shell -> ('a , 'b) idt_deriv =
     fun sh -> IdtD (sh, IdtG [])
 
+  let mk_zipper (t : ('a , 'b) idt) : ('a , 'b) idt_zipper =
+    (t, IdtG [])
+
+  let focus_of (z : ('a , 'b) idt_zipper) : ('a , 'b) idt =
+    fst z
+  
+  let ctxt_of (z : ('a , 'b) idt_zipper) : ('a * (('a, 'b) idt, unit) idt_deriv) list =
+    match z with
+    | (_, IdtG gma) -> gma
+  
+  let close (z : ('a, 'b) idt_zipper) : ('a, 'b) idt =
+    close_idt_ctxt (snd z) (fst z)
+  
+  let close_with (tr : ('a, 'b) idt) (z : ('a, 'b) idt_zipper) : ('a, 'b) idt =
+    close_idt_ctxt (snd z) tr 
+
+  let pred (z : ('a, 'b) idt_zipper) : ('a, 'b) idt_zipper =
+    match z with 
+    | (_, IdtG []) -> raise (ZipperError "Zipper has no predecessor")
+    | (fcs, IdtG ((a, IdtD(ts,g))::gs)) ->
+      Nd (a, close_idt_ctxt g (Nd (fcs, ts))), IdtG gs
+  
+  let rec pred_which (z : ('a, 'b) idt_zipper) (p : 'a -> bool) : ('a, 'b) idt_zipper =
+    match z with
+    | (_, IdtG []) -> raise (ZipperError "Zipper has no predecessor")
+    | (fcs, IdtG ((a, IdtD(ts,g))::gs)) ->
+      let pz = (Nd (a, close_idt_ctxt g (Nd (fcs, ts))), IdtG gs)
+      in if (p a) then pz else pred_which pz p
+  
+  let rec visit (z : ('a, 'b) idt_zipper) (d : dir) : ('a, 'b) idt_zipper =
+    match (focus_of z, d) with
+    | (Lf _, _) -> raise (ZipperError "Cannot visit a leaf")
+    | (Nd (a, sh), Dir ds) ->
+      let z' = seek (mk_zipper sh) ds in
+      begin match z' with
+        | (Lf _, _) -> raise (ZipperError "Leaf in shell during visit")
+        | (Nd (t, ts), g) -> (t, IdtG ((a, IdtD(ts, g)) :: ctxt_of z))
+      end
+  
+  and seek : 'a 'b. ('a, 'b) idt_zipper -> addr -> ('a, 'b) idt_zipper =
+    fun z a -> 
+    match a with
+    | [] -> z
+    | d :: ds -> visit (seek z ds) d 
+  
+  let seek_to (t : ('a, 'b) idt) (a : addr) : ('a, 'b) idt_zipper =
+    seek (mk_zipper t) a 
+  
+  let element_at (t : ('a, 'b) idt) (a : addr) : 'a =
+    match focus_of (seek_to t a) with
+    | Nd (x,_) -> x
+    | _ -> raise (ZipperError "no element at given address")
+  
 end
 
 (*****************************************************************************)
