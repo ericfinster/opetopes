@@ -116,15 +116,17 @@ let idt_unzip : 'a 'b 'c. ('a * 'b , 'c) idt
 
 type ('a, 'b) idt_deriv = IdtD of ('a, 'b) idt_shell * ('a, 'b) idt_ctxt
 and ('a, 'b) idt_ctxt = IdtG of ('a * (('a, 'b) idt, unit) idt_deriv) list
-
-type ('a, 'b) idt_lazy_deriv = ('a, 'b) idt_deriv Lazy.t
 type ('a, 'b) idt_zipper = ('a, 'b) idt * ('a, 'b) idt_ctxt
 
 type 'a tr_deriv = ('a, unit) idt_deriv
+type 'a lazy_tr_deriv = 'a tr_deriv Lazy.t
 type 'a tr_ctxt = ('a, unit) idt_ctxt
-type 'a tr_lazy_deriv = ('a, unit) idt_lazy_deriv
 type 'a tr_zipper = ('a, unit) idt_zipper
 
+type 'a nst_deriv = ('a, 'a) idt_deriv
+type 'a nst_ctx = ('a, 'a) idt_ctxt
+type 'a nst_zipper = ('a, 'a) idt_zipper
+    
 exception IdtZipperError of string
 
 let rec plug_idt_deriv : 'a 'b. ('a, 'b) idt_deriv -> 'a -> ('a, 'b) idt =
@@ -199,6 +201,34 @@ let element_at (t : ('a, 'b) idt) (a : addr) : 'a =
   | _ -> raise (IdtZipperError "no element at given address")
 
 
+(*****************************************************************************)
+(*                         Maps including derivatives                        *)
+(*****************************************************************************)
+
+let map_with_deriv (t : ('a, 'b) idt)
+    ~nd:(nd : 'a -> 'c tr_deriv Lazy.t -> 'd)
+    ~lf:(lf : 'b -> 'e) =
+  
+  let rec go : 'a 'b 'c 'd 'e.
+    ('a , 'b) idt
+    -> ('a -> 'c tr_deriv Lazy.t -> 'd)
+    -> ('b -> 'e)
+    -> ('d , 'e) idt =
+    fun t nd lf ->
+      match t with
+      | Lf b -> Lf (lf b)
+      | Nd (a,ash) ->
+        let d = nd a (lazy (deriv_of_sh ash)) in
+        let dsh = go ash (fun br _ -> go br nd lf)
+            (fun _ -> ()) in 
+        Nd (d,dsh)
+
+  in go t nd lf
+
+let map_tr_with_deriv (t : 'a tr)
+    ~f:(f : 'a -> 'b tr_deriv Lazy.t -> 'c) =
+  map_with_deriv t ~nd:f ~lf:(fun _ -> ())
+    
 (*****************************************************************************)
 (*                       Folding, Grafting and Joining                       *)
 (*****************************************************************************)
