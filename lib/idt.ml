@@ -125,7 +125,7 @@ type 'a tr_ctxt = ('a, unit) idt_ctxt
 type 'a tr_lazy_deriv = ('a, unit) idt_lazy_deriv
 type 'a tr_zipper = ('a, unit) idt_zipper
 
-exception ZipperError of string
+exception IdtZipperError of string
 
 let rec plug_idt_deriv : 'a 'b. ('a, 'b) idt_deriv -> 'a -> ('a, 'b) idt =
   fun d a ->
@@ -163,24 +163,24 @@ let close_with (tr : ('a, 'b) idt) (z : ('a, 'b) idt_zipper) : ('a, 'b) idt =
 
 let pred (z : ('a, 'b) idt_zipper) : ('a, 'b) idt_zipper =
   match z with 
-  | (_, IdtG []) -> raise (ZipperError "Zipper has no predecessor")
+  | (_, IdtG []) -> raise (IdtZipperError "Zipper has no predecessor")
   | (fcs, IdtG ((a, IdtD(ts,g))::gs)) ->
     Nd (a, close_idt_ctxt g (Nd (fcs, ts))), IdtG gs
 
 let rec pred_which (z : ('a, 'b) idt_zipper) (p : 'a -> bool) : ('a, 'b) idt_zipper =
   match z with
-  | (_, IdtG []) -> raise (ZipperError "Zipper has no predecessor")
+  | (_, IdtG []) -> raise (IdtZipperError "Zipper has no predecessor")
   | (fcs, IdtG ((a, IdtD(ts,g))::gs)) ->
     let pz = (Nd (a, close_idt_ctxt g (Nd (fcs, ts))), IdtG gs)
     in if (p a) then pz else pred_which pz p
 
 let rec visit (z : ('a, 'b) idt_zipper) (d : dir) : ('a, 'b) idt_zipper =
   match (focus_of z, d) with
-  | (Lf _, _) -> raise (ZipperError "Cannot visit a leaf")
+  | (Lf _, _) -> raise (IdtZipperError "Cannot visit a leaf")
   | (Nd (a, sh), Dir ds) ->
     let z' = seek (mk_zipper sh) ds in
     begin match z' with
-      | (Lf _, _) -> raise (ZipperError "Leaf in shell during visit")
+      | (Lf _, _) -> raise (IdtZipperError "Leaf in shell during visit")
       | (Nd (t, ts), g) -> (t, IdtG ((a, IdtD(ts, g)) :: ctxt_of z))
     end
 
@@ -196,7 +196,7 @@ let seek_to (t : ('a, 'b) idt) (a : addr) : ('a, 'b) idt_zipper =
 let element_at (t : ('a, 'b) idt) (a : addr) : 'a =
   match focus_of (seek_to t a) with
   | Nd (x,_) -> x
-  | _ -> raise (ZipperError "no element at given address")
+  | _ -> raise (IdtZipperError "no element at given address")
 
 
 (*****************************************************************************)
@@ -215,7 +215,7 @@ let rec intertwine : 'a 'b 'c 'd 'e. 'a tr -> 'b tr
         (fun abr cbr _ -> intertwine abr cbr f) in 
     let (e , f) = f a c (lazy (deriv_of_sh ash)) in
     (Nd (e,esh) , Nd (f,fsh))
-  | _ -> raise (ShapeError "mismatch in intertwine")
+  | _ -> raise (ShapeError "Mismatch in intertwine")
 
 let rec split_with_addr_and_deriv : 'a 'b 'c 'd.
   ('a , 'b) idt
@@ -302,16 +302,16 @@ let rec idt_fold (t : ('a, 'b) idt)
   in idt_fold_impl t lf nd
     
 and idt_graft : 'a 'b 'c. ('a, 'b) idt -> ('a, 'c) idt_shell -> ('a, 'c) idt =
-  fun t sh ->
-  idt_fold t
+  fun t sh -> idt_fold t
     ~lf:(fun _ addr -> element_at sh addr)
     ~nd:(fun a ash -> Nd (a, ash))
 
 and idt_join : 'a 'b. (('a , 'b) idt , 'b) idt -> ('a, 'b) idt =
   function
   | Lf b -> Lf b
-  | Nd (t, tsh) -> 
-    idt_graft t (map_tr tsh ~f:idt_join)
+  | Nd (t, tsh) ->
+    idt_graft t
+      (map_tr tsh ~f:idt_join)
 
 (*****************************************************************************)
 (*                     Utils for Encoding Lists and Trees                    *)
