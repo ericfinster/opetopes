@@ -203,23 +203,17 @@ let element_at (t : ('a, 'b) idt) (a : addr) : 'a =
 (*                       Folding, Grafting and Joining                       *)
 (*****************************************************************************)
 
-let rec intertwine : 'a 'b 'c 'd 'e 'f 'g 'h 'i.
-  ('a , 'b) idt
-  -> ('c , 'd) idt 
-  -> ('a -> 'c -> 'i tr_deriv Lazy.t -> ('e * 'f))
-  -> ('b -> 'd -> ('g * 'h))
-  -> ('e , 'g) idt * ('f , 'h) idt =
-  fun s t nd lf ->
+let rec intertwine : 'a 'b 'c 'd 'e. 'a tr -> 'b tr
+  -> ('a -> 'b -> 'c tr_deriv Lazy.t -> ('d * 'e))
+  -> 'd tr * 'e tr =
+  fun s t f ->
   match (s , t) with
-  | (Lf b , Lf d) ->
-    let (g , h) = lf b d in
-    (Lf g , Lf h)
+  | (Lf _ , Lf _) -> (Lf (), Lf ())
   | (Nd (a, ash) , Nd (c , csh)) ->
     let (esh , fsh) =
       intertwine ash csh 
-        (fun abr cbr _ -> intertwine abr cbr nd lf)
-        (fun _ _ -> ((),())) in 
-    let (e , f) = nd a c (lazy (deriv_of_sh ash)) in
+        (fun abr cbr _ -> intertwine abr cbr f) in 
+    let (e , f) = f a c (lazy (deriv_of_sh ash)) in
     (Nd (e,esh) , Nd (f,fsh))
   | _ -> raise (ShapeError "mismatch in intertwine")
 
@@ -239,83 +233,79 @@ let rec split_with_addr_and_deriv : 'a 'b 'c 'd.
            split_with_addr_and_deriv br ((Dir dir)::addr) f) in
     (Nd (c,csh), Nd (d,dsh))
 
-(* let rec idt_fold (t : ('a, 'b) idt)
- *     ~lf:(lf : ('b -> addr -> 'c))
- *     ~nd:(nd : ('a -> 'c tr -> 'c)) : 'c =  *)
+let rec idt_fold (t : ('a, 'b) idt)
+    ~lf:(lf : ('b -> addr -> 'c))
+    ~nd:(nd : ('a -> 'c tr -> 'c)) : 'c =
 
-let rec idt_fold_impl : 'a 'b 'c 'd. ('a, 'b) idt
-  -> ('b -> addr -> 'c)
-  -> ('a -> 'c tr -> 'c) -> 'c =
-  fun tr lf nd ->
-  match tr with
-  | Lf b -> lf b []
-  | Nd (a, Lf u) -> nd a (Lf u)
-  | Nd (a, Nd (v, h)) -> 
-    fst (init_vertical a lf nd v h)
-      
-and fold_pass : 'a 'b 'c. ('b -> addr -> 'c)                  
-  -> ('a -> 'c tr -> 'c)
-  -> ('a, 'b) idt tr
-  -> addr -> addr tr_deriv Lazy.t
-  -> ('c tr * addr tr) =
-  fun lf nd h addr dr ->
-  match h with
-  | Lf _ -> (Lf () , plug_idt_deriv (Lazy.force dr) addr)
-  | Nd (Lf b, hs) ->
-    let (csh,atr) = split_with_addr_and_deriv hs []
-        (fun sh dir der ->
-           fold_pass lf nd sh ((Dir dir) :: addr) der) in
-    let c = lf b addr in 
-    (Nd (c,csh), idt_join atr)
-  | Nd (Nd (a,vs), hs) ->
-    let (btr,atr) = fold_pass lf nd vs addr dr in
-    let (csh,atr') = intertwine hs atr
-        (fold_pass lf nd) (fun _ _ -> ((),())) in
-    let c = nd a btr in 
-    (Nd (c,csh) , idt_join atr')
+  let rec idt_fold_impl : 'a 'b 'c 'd. ('a, 'b) idt
+    -> ('b -> addr -> 'c)
+    -> ('a -> 'c tr -> 'c) -> 'c =
+    fun tr lf nd ->
+      match tr with
+      | Lf b -> lf b []
+      | Nd (a, Lf u) -> nd a (Lf u)
+      | Nd (a, Nd (v, h)) -> 
+        fst (init_vertical a lf nd v h)
 
-and init_horizontal : 'a 'b 'c. 'a
-  -> ('b -> addr -> 'c)
-  -> ('a -> 'c tr -> 'c)
-  -> ('a, 'b) idt tr tr
-  -> 'c * addr tr
-  -> 'c * addr tr =
-  fun a lf nd hs (c , atr) ->
-  let (csh,atr') = intertwine hs atr
-      (fold_pass lf nd) (fun _ _ -> ((),())) in
-  (nd a (Nd (c, csh)), idt_join atr')
+  and fold_pass : 'a 'b 'c. ('b -> addr -> 'c)                  
+    -> ('a -> 'c tr -> 'c)
+    -> ('a, 'b) idt tr
+    -> addr -> addr tr_deriv Lazy.t
+    -> ('c tr * addr tr) =
+    fun lf nd h addr dr ->
+      match h with
+      | Lf _ -> (Lf () , plug_idt_deriv (Lazy.force dr) addr)
+      | Nd (Lf b, hs) ->
+        let (csh,atr) = split_with_addr_and_deriv hs []
+            (fun sh dir der ->
+               fold_pass lf nd sh ((Dir dir) :: addr) der) in
+        let c = lf b addr in 
+        (Nd (c,csh), idt_join atr)
+      | Nd (Nd (a,vs), hs) ->
+        let (btr,atr) = fold_pass lf nd vs addr dr in
+        let (csh,atr') = intertwine hs atr
+            (fold_pass lf nd) in
+        let c = nd a btr in 
+        (Nd (c,csh) , idt_join atr')
 
-and init_vertical : 'a 'b 'c. 'a
-  -> ('b -> addr -> 'c)
-  -> ('a -> 'c tr -> 'c)
-  -> ('a, 'b) idt
-  -> ('a, 'b) idt tr tr
-  -> 'c * addr tr =
-  fun a lf nd v h ->
-  match v with
-  | Lf b ->
-    let atr = map_tr_with_addr h
-        ~f:(fun _ dir -> [Dir dir]) in
-    let c = lf b [] in
-    init_horizontal a lf nd h (c,atr) 
-  | Nd (a, Lf _) ->
-    let atr = map_tr h ~f:(fun _ -> []) in 
-    let c = nd a (Lf ()) in 
-    init_horizontal a lf nd h (c,atr)
-  | Nd (a, Nd(v,h)) ->
-    init_horizontal a lf nd h (init_vertical a lf nd v h)
+  and init_horizontal : 'a 'b 'c. 'a
+    -> ('b -> addr -> 'c)
+    -> ('a -> 'c tr -> 'c)
+    -> ('a, 'b) idt tr tr
+    -> 'c * addr tr
+    -> 'c * addr tr =
+    fun a lf nd hs (c , atr) ->
+      let (csh,atr') = intertwine hs atr
+          (fold_pass lf nd) in
+      (nd a (Nd (c, csh)), idt_join atr')
 
-(* and idt_graft : 'a 'b 'c. ('a, 'b) idt -> ('a, 'c) idt_shell -> ('a, 'c) idt =
- *   fun t sh ->
- *   idt_fold t
- *     ~lf:(fun _ addr -> element_at sh addr)
- *     ~nd:(fun a ash -> Nd (a, ash)) *)
+  and init_vertical : 'a 'b 'c. 'a
+    -> ('b -> addr -> 'c)
+    -> ('a -> 'c tr -> 'c)
+    -> ('a, 'b) idt
+    -> ('a, 'b) idt tr tr
+    -> 'c * addr tr =
+    fun a lf nd v h ->
+      match v with
+      | Lf b ->
+        let atr = map_tr_with_addr h
+            ~f:(fun _ dir -> [Dir dir]) in
+        let c = lf b [] in
+        init_horizontal a lf nd h (c,atr) 
+      | Nd (a, Lf _) ->
+        let atr = map_tr h ~f:(fun _ -> []) in 
+        let c = nd a (Lf ()) in 
+        init_horizontal a lf nd h (c,atr)
+      | Nd (a, Nd(v,h)) ->
+        init_horizontal a lf nd h (init_vertical a lf nd v h)
 
+  in idt_fold_impl t lf nd
+    
 and idt_graft : 'a 'b 'c. ('a, 'b) idt -> ('a, 'c) idt_shell -> ('a, 'c) idt =
   fun t sh ->
-  idt_fold_impl t 
-    (fun _ addr -> element_at sh addr)
-    (fun a ash -> Nd (a, ash))
+  idt_fold t
+    ~lf:(fun _ addr -> element_at sh addr)
+    ~nd:(fun a ash -> Nd (a, ash))
 
 and idt_join : 'a 'b. (('a , 'b) idt , 'b) idt -> ('a, 'b) idt =
   function
