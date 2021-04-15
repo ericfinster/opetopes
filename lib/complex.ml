@@ -27,6 +27,11 @@ let rec map_cmplx (c : 'a cmplx) ~f:(f : 'a -> 'b) : 'b cmplx =
 (*                             Nesting Operations                            *)
 (*****************************************************************************)
 
+let base_value (n : 'a nst) : 'a =
+  match n with
+  | Lf a -> a
+  | Nd (a,_) -> a
+
 let rec spine (n : 'a nst) (d : 'a lazy_tr_deriv) : 'a tr =
   match n with
   | Lf a -> plug_idt_deriv (Lazy.force d) a
@@ -41,41 +46,40 @@ let rec total_canopy (n : 'a nst) (d : 'a nst lazy_tr_deriv) : 'a nst tr =
   | Nd (_,ash) ->
     idt_join (map_tr_with_deriv ash ~f:total_canopy)
 
-(* let rec canopy_with_guide : 'b tree -> 'a nesting ldm -> 'a nesting -> 'a canopy m =
- *   fun g ldm n ->
- *   match (n, g) with
- *     (_, Lf) -> Lazy.force ldm >>= fun d -> return (plug_tree_deriv d n)
- *   | (Box (_, cn), Nd (_, sh)) ->
- *     let f nn gg _ dd = canopy_with_guide gg (lazy (return (Lazy.force dd))) nn
- *     in TM.lazy_match f cn sh >>= T.tree_join
- *   | _ -> throw "Bad canopy" *)
+let rec canopy_with_guide
+    (n : 'a nst) (g : 'b tr)
+    (d : 'a nst lazy_tr_deriv) : 'a nst tr =
+  match (n, g) with
+  | (_ , Lf _) -> plug_idt_deriv (Lazy.force d) n
+  | (Nd (_, nsh), Nd (_, gsh))  ->
+    let ntt = match_tr_with_deriv nsh gsh
+        ~f:(canopy_with_guide) in
+    idt_join ntt
+  | _ -> raise (ShapeError "Mismatch in canopy_with_guide")
 
-(* let rec excise_with : 'b tree -> 'a nesting ldm -> 'a nesting -> ('a nesting * 'a canopy) m =
- *   fun g ldm n ->
- *   match (n, g) with
- *     (_, Lf) -> let v = base_value n
- *     in total_canopy ldm n >>= fun cn ->
- *     Lazy.force ldm >>= fun d -> 
- *     return (Dot v, plug_tree_deriv d (Box (v, cn)))
- *   | (Box (a, cn), Nd (_, sh)) ->
- *     let f nn tt _ dd = excise_with tt (lazy (return (Lazy.force dd))) nn
- *     in TM.lazy_match f cn sh >>= fun p ->
- *     let (ncn, toJn) = T.tree_unzip p
- *     in T.tree_join toJn >>= fun jn ->
- *     return (Box (a, ncn), jn)
- *   | _ -> throw "Error during excision" *)
-
-(* let rec compress_with : 'b tree_shell -> 'a nesting ldm -> 'a nesting -> 'a nesting m =
- *   fun s ldm n ->
- *   match s with
- *     Nd (Lf, sh) -> T.root_value sh >>= fun r ->
- *     compress_with r ldm n >>= fun nn ->
- *     Lazy.force ldm >>= fun d -> 
- *     return (Box (base_value n, plug_tree_deriv d nn))
- *   | Nd (sk, sh) -> canopy_with_guide sk ldm n >>= fun cn ->
- *     let f nn gg _ dd = compress_with gg (lazy (return (Lazy.force dd))) nn
- *     in TM.lazy_match f cn sh >>= fun rn ->
- *     return (Box (base_value n, rn))
- *   | Lf -> return n *)
-
-
+let rec excise_with
+    (n : 'a nst) (g : 'b tr)
+    (d : 'a nst lazy_tr_deriv) : ('a nst * 'a nst tr) =
+  match (n, g) with
+  | (_, Lf _) ->
+    let v = base_value n in
+    let tc = total_canopy n d in
+    (Lf v, plug_idt_deriv (Lazy.force d) (Nd (v,tc)))
+  | (Nd (a, ash), Nd (_, gsh)) ->
+    let (ash',jtr) = intertwine ash gsh excise_with in 
+    (Nd (a,ash'), idt_join jtr)
+  | _ -> raise (ShapeError "Mismatch in excise_with")
+           
+let rec compress_with
+    (n : 'a nst) (gsh : 'b tr_shell)
+    (d : 'a nst lazy_tr_deriv) : 'a nst =
+  match gsh with
+  | Lf _ -> n
+  | Nd (Lf _, sh) ->
+    let v = root_value sh in
+    let n' = compress_with n v d in
+    Nd (base_value n, plug_idt_deriv (Lazy.force d) n')
+  | Nd (sk, sh) ->
+    let cnp = canopy_with_guide n sk d in 
+    let nsh = match_tr_with_deriv cnp sh ~f:compress_with in
+    Nd (base_value n, nsh)

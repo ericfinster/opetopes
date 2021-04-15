@@ -228,7 +228,35 @@ let map_with_deriv (t : ('a, 'b) idt)
 let map_tr_with_deriv (t : 'a tr)
     ~f:(f : 'a -> 'b tr_deriv Lazy.t -> 'c) =
   map_with_deriv t ~nd:f ~lf:(fun _ -> ())
-    
+
+let match_with_deriv (u : ('a, 'b) idt) (v : ('c, 'd) idt)
+    ~nd:(nd : 'a -> 'c -> 'e lazy_tr_deriv -> 'f)
+    ~lf:(lf : 'b -> 'd -> 'g) : ('f, 'g) idt =
+  
+  let rec go : 'a 'b 'c 'd 'e 'f 'g. 
+    ('a, 'b) idt
+    -> ('c, 'd) idt
+    -> ('a -> 'c -> 'e lazy_tr_deriv -> 'f)
+    -> ('b -> 'd -> 'g)
+    -> ('f , 'g) idt =
+    fun u v nd lf ->
+      match (u,v) with
+      | (Lf b , Lf d) -> Lf (lf b d)
+      | (Nd (a,ash), Nd (c,csh)) ->
+        let fsh = go ash csh
+            (fun abr cbr _ -> go abr cbr nd lf)
+            (fun _ _ -> ()) in
+        let f = nd a c (lazy (deriv_of_sh fsh)) in 
+        Nd (f,fsh)
+      | _ -> raise (ShapeError "Mismatch in go")
+
+  in go u v nd lf 
+
+let match_tr_with_deriv (u : 'a tr) (v : 'b tr)
+    ~f:(f : 'a -> 'b -> 'c lazy_tr_deriv -> 'd) =
+  match_with_deriv u v ~nd:f
+    ~lf:(fun _ _ -> ())
+
 (*****************************************************************************)
 (*                       Folding, Grafting and Joining                       *)
 (*****************************************************************************)
