@@ -398,3 +398,71 @@ module IdtConv = struct
       Nd (x, of_list trs)
 
 end
+
+
+(*****************************************************************************)
+(*                          Tree Traversal Routines                          *)
+(*****************************************************************************)
+
+(* module TreeTraverse (A : Base.Applicative.Basic) = struct
+ * 
+ *   open TreeZipper
+ *   
+ *   (\** Basic tree traversal *\)
+ *   let rec traverse : 'a 'b. 'a tree -> ('a -> 'b A.t) -> 'b tree A.t =
+ *     fun t f -> let open AppSyntax(A) in 
+ *       match t with
+ *       | Lf -> A.return Lf
+ *       | Nd (a,sh) ->
+ *         let+ b = f a
+ *         and+ sh' = traverse sh (fun br -> traverse br f)
+ *         in Nd (b,sh')
+ * 
+ *   (\** Traverse with address in scope *\)
+ *   let rec traverse_with_addr : 'a 'b. 'a tree ->
+ *     ('a -> addr -> 'b A.t) -> 'b tree A.t = fun t f -> 
+ *     let open AppSyntax(A) in 
+ *     let rec go t addr =
+ *       match t with
+ *       | Lf -> A.return Lf
+ *       | Nd (a,sh) ->
+ *         let+ b = f a addr
+ *         and+ sh' = traverse_with_addr sh
+ *             (fun br dir -> go br ((Dir dir)::addr))
+ *         in Nd (b,sh')
+ *         
+ *     in go t []
+ * 
+ *   (\** Traverse with local derivative in scope *\)
+ *   let rec traverse_with_deriv : 'a 'b 'c. 'a tree ->
+ *     ('a -> 'b tr_deriv -> 'c A.t) -> 'c tree A.t = fun t f ->
+ *     let open AppSyntax(A) in 
+ *     match t with
+ *     | Lf -> A.return Lf
+ *     | Nd (a,sh) ->
+ *       let+ b = f a (sh_deriv sh)
+ *       and+ sh' = traverse sh
+ *           (fun br -> traverse_with_deriv br f)
+ *       in Nd (b,sh')
+ * 
+ *   (\* FIXME: Actually, the derivative here should really be lazy, since
+ *      most of the time we don't actually use it.... *\)
+ *   
+ *   (\** Traverse with both addres and local derivative
+ *       in scope *\)
+ *   let traverse_with_addr_and_deriv : 'a 'b 'c. 'a tree 
+ *     -> ('a -> addr -> 'b tr_deriv -> 'c A.t)
+ *     -> 'c tree A.t = fun t f -> 
+ *     let open AppSyntax(A) in 
+ *     let rec go t addr =
+ *       match t with
+ *       | Lf -> A.return Lf
+ *       | Nd (a,sh) ->
+ *         let+ b = f a addr (sh_deriv sh)
+ *         and+ sh' = traverse_with_addr sh
+ *             (fun br dir -> go br ((Dir dir)::addr))
+ *         in Nd (b,sh')
+ *         
+ *     in go t []
+ *     
+ * end *)

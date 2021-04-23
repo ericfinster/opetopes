@@ -175,3 +175,36 @@ let focus_face (z : 'a cmplx_zipper) : 'a cmplx =
     Adjoin (with_head frm hd', Lf (base_value n))
 
 
+(*****************************************************************************)
+(*                             Old Bond Checking                             *)
+(*****************************************************************************)
+
+(* module ComplexOps (M : MonadError with type e = string) = struct
+ * 
+ *   open M
+ * 
+ *   module T = TreeOps(M)
+ *   module TM = TreeMatch(M)
+ *   module N = NestingOps(M)
+ *            
+ *   let rec check_bonds : 'a complex -> ('a tree * 'a tree_deriv) m =
+ *     function
+ *       [] -> return (Lf, mk_deriv Lf)  (\* Dummy *\)
+ *     | [objs] -> if (is_valid_obj_nesting objs)
+ *                 then return (N.to_tree objs, mk_deriv (Nd (Lf, Lf)))
+ *                 else throw "Object nesting is not linear"
+ *     | n :: ns -> check_bonds ns >>= function
+ *                    (t, d) -> N.spine (lazy (return d)) n >>= fun sp ->
+ *                              TM.match_zip t sp >>= fun _ ->
+ *                              return (N.to_tree n, mk_deriv (as_shell sp))
+ *         
+ *   let rec is_bonded : 'a complex -> bool m = 
+ *     fun c -> catch (check_bonds c) (fun _ -> return false) >>=
+ *                fun _ -> return true
+ * 
+ *   let is_opetope : 'a complex -> bool m =
+ *     fun c -> match c with
+ *              | (Dot _) :: ns -> is_bonded c
+ *              | _ ->  return false
+ *     
+ * end *)
