@@ -43,67 +43,12 @@ let rec mk_cmplx_zipper (c : 'a cmplx) : 'a cmplx_zipper =
   | Base n -> BaseZip (mk_zipper n)
   | Adjoin (frm,n) ->
     AdjoinZip (mk_cmplx_zipper frm, mk_zipper n) 
-           
-(*****************************************************************************)
-(*                             Nesting Operations                            *)
-(*****************************************************************************)
 
-let base_value (n : 'a nst) : 'a =
-  match n with
-  | Lf a -> a
-  | Nd (a,_) -> a
-
-let rec spine (n : 'a nst) (d : 'a lazy_tr_deriv) : 'a tr =
-  match n with
-  | Lf a -> plug_idt_deriv (Lazy.force d) a
-  | Nd (_,ash) -> shell_spine ash
-
-and shell_spine (sh : 'a nst tr) : 'a tr =
-  idt_join (map_tr_with_deriv sh ~f:(spine))
-
-let rec total_canopy (n : 'a nst) (d : 'a nst lazy_tr_deriv) : 'a nst tr =
-  match n with
-  | Lf a -> plug_idt_deriv (Lazy.force d) (Lf a)
-  | Nd (_,ash) ->
-    idt_join (map_tr_with_deriv ash ~f:total_canopy)
-
-let rec canopy_with_guide
-    (n : 'a nst) (g : 'b tr)
-    (d : 'a nst lazy_tr_deriv) : 'a nst tr =
-  match (n, g) with
-  | (_ , Lf _) -> plug_idt_deriv (Lazy.force d) n
-  | (Nd (_, nsh), Nd (_, gsh))  ->
-    let ntt = match_tr_with_deriv nsh gsh
-        ~f:(canopy_with_guide) in
-    idt_join ntt
-  | _ -> raise (ShapeError "Mismatch in canopy_with_guide")
-
-let rec excise_with
-    (n : 'a nst) (g : 'b tr)
-    (d : 'a nst lazy_tr_deriv) : ('a nst * 'a nst tr) =
-  match (n, g) with
-  | (_, Lf _) ->
-    let v = base_value n in
-    let tc = total_canopy n d in
-    (Lf v, plug_idt_deriv (Lazy.force d) (Nd (v,tc)))
-  | (Nd (a, ash), Nd (_, gsh)) ->
-    let (ash',jtr) = intertwine ash gsh excise_with in 
-    (Nd (a,ash'), idt_join jtr)
-  | _ -> raise (ShapeError "Mismatch in excise_with")
-           
-let rec compress_with
-    (n : 'a nst) (gsh : 'b tr_shell)
-    (d : 'a nst lazy_tr_deriv) : 'a nst =
-  match gsh with
-  | Lf _ -> n
-  | Nd (Lf _, sh) ->
-    let v = root_value sh in
-    let n' = compress_with n v d in
-    Nd (base_value n, plug_idt_deriv (Lazy.force d) n')
-  | Nd (sk, sh) ->
-    let cnp = canopy_with_guide n sk d in 
-    let nsh = match_tr_with_deriv cnp sh ~f:compress_with in
-    Nd (base_value n, nsh)
+let rec labels (c : 'a cmplx) : 'a list =
+  match c with
+  | Base n -> nodes n
+  | Adjoin (tl,hd) ->
+    List.append (nst_labels hd) (labels tl)
 
 (*****************************************************************************)
 (*                         Complex Zipper Operations                         *)
@@ -234,34 +179,34 @@ and seek_cmplx (z : 'a cmplx_zipper) (addr : addr) : 'a cmplx_zipper =
 (*                             Complex Validation                            *)
 (*****************************************************************************)
 
+let rec validate_linear (n : 'a nst) : unit =
+  match n with
+  | Lf _ -> ()
+  | Nd (_,Nd (br,Lf ())) ->
+    validate_linear br
+  | _ -> raise (ShapeError "Invalid object nesting") 
+
+let rec validate_bonds (c : 'a cmplx) : 'a tr * 'a tr_deriv = 
+  match c with
+  | Base n ->
+    validate_linear n;
+    (as_tr n, mk_deriv (Nd (Lf (), Lf ())))
+  | Adjoin (tl,hd) ->
+    let (t,d) = validate_bonds tl in
+    let sp = spine hd (lazy d) in
+    match_shape t sp; 
+    (as_tr hd, deriv_of_sh sp)
+
 let validate (c : 'a cmplx) : unit =
-
-  let rec validate_obj_nst (n : 'a nst) : unit =
-    match n with
-    | Lf _ -> ()
-    | Nd (_,Nd (br,Lf ())) ->
-      validate_obj_nst br
-    | _ -> raise (ShapeError "Invalid object nesting") in 
-             
-  let rec validate_local (c : 'a cmplx) : 'a tr * 'a tr_deriv = 
-    match c with
-    | Base n ->
-      validate_obj_nst n;
-      (as_tr n, mk_deriv (Nd (Lf (), Lf ())))
-    | Adjoin (tl,hd) ->
-      let (t,d) = validate_local tl in
-      let sp = spine hd (lazy d) in
-      match_shape t sp; 
-      (as_tr hd, deriv_of_sh sp)
-      
-  in match c with
+  let _ = validate_bonds c in ()
+                              
+let validate_opetope (c : 'a cmplx) : unit = 
+  match c with
   | Base (Lf _) -> ()
-  | Adjoin (f, Lf _) ->
-    let _ = validate_local f in ()
+  | Adjoin (f, Lf _) -> 
+    let (c,_) = validate_bonds f in
+    if (is_corolla c) then ()
+    else raise (ShapeError "Boundary is not a corolla")
   | _ -> raise (ShapeError "Opetopic complex is not closed")
-    
-
-
-
 
 

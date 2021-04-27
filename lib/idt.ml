@@ -47,7 +47,7 @@ let is_leaf (t : ('a , 'b) idt) : bool =
 let is_node (t : ('a , 'b) idt) : bool =
   match t with
   | Lf _ -> false
-  | Nd _ -> true
+  | Nd _ -> true    
 
 (** general functorial action *)
 let map (t : ('a , 'b) idt) ~nd:(nd : 'a -> 'c) ~lf:(lf : 'b -> 'd) : ('c , 'd) idt =
@@ -119,6 +119,20 @@ let idt_unzip : 'a 'b 'c. ('a * 'b , 'c) idt
 
 let as_tr (t : ('a,'b) idt) : 'a tr =
   map t ~nd:(fun a -> a) ~lf:(fun _ -> ())
+
+let rec nodes : 'a 'b. ('a, 'b) idt -> 'a list =
+  fun t -> 
+  match t with
+  | Lf _ -> []
+  | Nd (a,sh) ->
+    let brs = map_tr sh ~f:nodes in
+    let brs_nds = List.concat (nodes brs) in 
+    a :: brs_nds
+
+let is_corolla (t : ('a, 'b) idt) : bool =
+  match t with
+  | Lf _ -> false
+  | Nd (_, sh) -> List.for_all (nodes sh) ~f:is_leaf
 
 (*****************************************************************************)
 (*                          Zippers and Derivatives                          *)
@@ -544,6 +558,75 @@ let extents (sh : 'a tr tr) : addr tr =
 
   in go sh [] 
 
+(*****************************************************************************)
+(*                           Operations on Nestings                          *)
+(*****************************************************************************)
+    
+let rec nst_labels : 'a. 'a nst -> 'a list =
+  fun n -> 
+  match n with
+  | Lf a -> [a]
+  | Nd (a,sh) ->
+    let brs = map_tr sh ~f:nst_labels in
+    let brs_nds = List.concat (nodes brs) in 
+    a :: brs_nds
+
+let base_value (n : 'a nst) : 'a =
+  match n with
+  | Lf a -> a
+  | Nd (a,_) -> a
+
+let rec spine (n : 'a nst) (d : 'a lazy_tr_deriv) : 'a tr =
+  match n with
+  | Lf a -> plug_idt_deriv (Lazy.force d) a
+  | Nd (_,ash) -> shell_spine ash
+
+and shell_spine (sh : 'a nst tr) : 'a tr =
+  idt_join (map_tr_with_deriv sh ~f:(spine))
+
+let rec total_canopy (n : 'a nst) (d : 'a nst lazy_tr_deriv) : 'a nst tr =
+  match n with
+  | Lf a -> plug_idt_deriv (Lazy.force d) (Lf a)
+  | Nd (_,ash) ->
+    idt_join (map_tr_with_deriv ash ~f:total_canopy)
+
+let rec canopy_with_guide
+    (n : 'a nst) (g : 'b tr)
+    (d : 'a nst lazy_tr_deriv) : 'a nst tr =
+  match (n, g) with
+  | (_ , Lf _) -> plug_idt_deriv (Lazy.force d) n
+  | (Nd (_, nsh), Nd (_, gsh))  ->
+    let ntt = match_tr_with_deriv nsh gsh
+        ~f:(canopy_with_guide) in
+    idt_join ntt
+  | _ -> raise (ShapeError "Mismatch in canopy_with_guide")
+
+let rec excise_with
+    (n : 'a nst) (g : 'b tr)
+    (d : 'a nst lazy_tr_deriv) : ('a nst * 'a nst tr) =
+  match (n, g) with
+  | (_, Lf _) ->
+    let v = base_value n in
+    let tc = total_canopy n d in
+    (Lf v, plug_idt_deriv (Lazy.force d) (Nd (v,tc)))
+  | (Nd (a, ash), Nd (_, gsh)) ->
+    let (ash',jtr) = intertwine ash gsh excise_with in 
+    (Nd (a,ash'), idt_join jtr)
+  | _ -> raise (ShapeError "Mismatch in excise_with")
+           
+let rec compress_with
+    (n : 'a nst) (gsh : 'b tr_shell)
+    (d : 'a nst lazy_tr_deriv) : 'a nst =
+  match gsh with
+  | Lf _ -> n
+  | Nd (Lf _, sh) ->
+    let v = root_value sh in
+    let n' = compress_with n v d in
+    Nd (base_value n, plug_idt_deriv (Lazy.force d) n')
+  | Nd (sk, sh) ->
+    let cnp = canopy_with_guide n sk d in 
+    let nsh = match_tr_with_deriv cnp sh ~f:compress_with in
+    Nd (base_value n, nsh)
 
 (*****************************************************************************)
 (*                     Utils for Encoding Lists and Trees                    *)
