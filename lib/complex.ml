@@ -165,7 +165,7 @@ let rec extract : 'a 'b. 'a cmplx_zipper -> 'b tr -> 'a cmplx =
     
 let focus_face (z : 'a cmplx_zipper) : 'a cmplx =
   match z with
-  | BaseZip ((n,_)) -> Base (Nd (base_value n, Lf ()))
+  | BaseZip ((n,_)) -> Base (Lf (base_value n)) 
   | AdjoinZip (fz,(n,_)) ->
     let sp = focus_spine z in
     let d = focus_deriv z in
