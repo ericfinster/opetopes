@@ -117,6 +117,9 @@ let idt_unzip : 'a 'b 'c. ('a * 'b , 'c) idt
   -> (('a , 'c) idt * ('b , 'c) idt) =
   fun t -> split_with t (fun p -> p)
 
+let as_tr (t : ('a,'b) idt) : 'a tr =
+  map t ~nd:(fun a -> a) ~lf:(fun _ -> ())
+
 (*****************************************************************************)
 (*                          Zippers and Derivatives                          *)
 (*****************************************************************************)
@@ -296,7 +299,7 @@ let match_with_deriv (u : ('a, 'b) idt) (v : ('c, 'd) idt)
             (fun _ _ -> ()) in
         let f = nd a c (lazy (deriv_of_sh fsh)) in 
         Nd (f,fsh)
-      | _ -> raise (ShapeError "Mismatch in go")
+      | _ -> raise (ShapeError "Match failed")
 
   in go u v nd lf 
 
@@ -304,6 +307,12 @@ let match_tr_with_deriv (u : 'a tr) (v : 'b tr)
     ~f:(f : 'a -> 'b -> 'c lazy_tr_deriv -> 'd) =
   match_with_deriv u v ~nd:f
     ~lf:(fun _ _ -> ())
+
+(** match for effect *)
+let match_shape (u : ('a,'b) idt) (v : ('c,'d) idt) : unit =
+  let _ = match_with_deriv u v
+      ~nd:(fun _ _ _ -> ())
+      ~lf:(fun _ _ -> ()) in ()
 
 (*****************************************************************************)
 (*                          Tree Traversal Routines                          *)
