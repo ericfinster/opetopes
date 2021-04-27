@@ -23,6 +23,13 @@ type 'a tr_shell = ('a, unit) idt_shell
 type dir = Dir of addr
 and addr = dir list
 
+let (<|) : addr -> addr -> addr =
+  fun dir addr -> ((Dir dir)::addr)
+
+let addr_of (d : dir) : addr
+  = match d with
+  | Dir a -> a
+
 (** Signals malformed or unexpected 
     tree conditions *)
 exception ShapeError of string
@@ -79,7 +86,7 @@ let map_with_addr (t : ('a , 'b) idt)
       | Nd (a,sh) ->
         let a' = n a addr in
         let sh' = go sh []
-            (fun br dir -> go br ((Dir dir)::addr) n l)
+            (fun br dir -> go br (dir <| addr) n l)
             (fun _ _ -> ())
         in Nd (a',sh')
           
@@ -200,11 +207,52 @@ let element_at (t : ('a, 'b) idt) (a : addr) : 'a =
   | Nd (x,_) -> x
   | _ -> raise (IdtZipperError "no element at given address")
 
+let sibling : 'a 'b. ('a, 'b) idt_zipper -> dir -> ('a, 'b) idt_zipper =
+  fun (fcs,ctx) dir ->
+  match ctx with
+  | IdtG [] -> raise (IdtZipperError "no sibling in empty context")
+  | IdtG ((a, IdtD (vs, IdtG hcn))::cs) ->
+    let vzip = seek_to vs (addr_of dir) in
+    match focus_of vzip with
+    | Lf _ -> raise (IdtZipperError "horizontal leaf in sibling")
+    | Nd (Lf _,_) -> raise (IdtZipperError "vertical leaf in sibling")
+    | Nd (Nd (nfcs,vrem),hmsk) ->
+      let vctx = IdtG ((fcs, IdtD (hmsk, snd vzip)) :: hcn) in
+      let nctx = IdtG ((a, IdtD (vrem, vctx))::cs) in 
+      (nfcs, nctx)
 
 (*****************************************************************************)
 (*                         Maps including derivatives                        *)
 (*****************************************************************************)
 
+let map_with_addr_and_deriv (t : ('a, 'b) idt)
+    ~nd:(nd : 'a -> addr -> 'c tr_deriv Lazy.t -> 'd)
+    ~lf:(lf : 'b -> addr -> 'e) =
+
+  let rec go : 'a 'b 'c 'd 'e.
+    ('a , 'b) idt
+    -> addr 
+    -> ('a -> addr -> 'c tr_deriv Lazy.t -> 'd)
+    -> ('b -> addr -> 'e)
+    -> ('d , 'e) idt =
+    fun t addr nd lf ->
+      match t with
+      | Lf b -> Lf (lf b addr)
+      | Nd (a,ash) -> 
+        let d = nd a addr (lazy (deriv_of_sh ash)) in
+        let dsh = go ash []
+            (fun br dir _ ->
+               go br (dir <| addr) nd lf)
+            (fun _ _ -> ()) in
+        Nd (d,dsh)
+          
+  in go t [] nd lf 
+
+let map_tr_with_addr_and_deriv (t : 'a tr)
+    ~f:(f : 'a -> addr -> 'b tr_deriv Lazy.t -> 'c) : 'c tr =
+  map_with_addr_and_deriv t
+    ~nd:f ~lf:(fun _ _ -> ())
+    
 let map_with_deriv (t : ('a, 'b) idt)
     ~nd:(nd : 'a -> 'c tr_deriv Lazy.t -> 'd)
     ~lf:(lf : 'b -> 'e) =
@@ -258,6 +306,99 @@ let match_tr_with_deriv (u : 'a tr) (v : 'b tr)
     ~lf:(fun _ _ -> ())
 
 (*****************************************************************************)
+(*                          Tree Traversal Routines                          *)
+(*****************************************************************************)
+
+module TreeTraverse (A : Applicative.Basic) = struct
+
+  module AI = Applicative.Make(A)
+
+  module AppSyntax = struct
+    let (let+) x f = AI.map ~f:f x
+    let (and+) p q = AI.both p q 
+  end
+  
+  (** Basic traversal *)
+  let rec traverse : 'a 'b 'c 'd. ('a, 'b) idt
+    -> ('a -> 'c A.t)
+    -> ('b -> 'd A.t)
+    -> ('c,'d) idt A.t = fun t nd lf ->
+    let open AppSyntax in 
+    match t with
+    | Lf b -> let+ d = lf b in Lf d
+    | Nd (a,sh) ->
+      let+ b = nd a
+      and+ sh' = traverse_tr sh
+          ~f:(fun br -> traverse br nd lf)
+      in Nd (b,sh')
+
+  and traverse_tr (t : 'a tr) ~f:(f : 'a -> 'b A.t) : 'b tr A.t =
+    traverse t f (fun _ -> A.return ())
+
+  let traverse_nst (t : 'a nst) ~f:(f : 'a -> 'b A.t) : 'b nst A.t =
+    traverse t f f
+  
+  (** Traverse with address in scope *)
+  let rec traverse_with_addr : 'a 'b 'c 'd. ('a, 'b) idt
+    -> ('a -> addr -> 'c A.t)
+    -> ('b -> addr -> 'd A.t)
+    -> addr -> ('c, 'd) idt A.t =
+    fun t nd lf addr ->
+    let open AppSyntax in 
+    match t with
+    | Lf b -> let+ d = lf b addr in Lf d
+    | Nd (a,ash) ->
+      let+ b = nd a addr 
+      and+ bsh = traverse_with_addr ash
+          (fun br dir -> traverse_with_addr br nd lf (dir <| addr))
+          (fun _ _ -> A.return ()) [] in
+      Nd (b,bsh)
+
+  (** Traverse a tree with address in scope *)
+  and traverse_tr_with_addr (t : 'a tr)
+      ~f:(f : 'a -> addr -> 'b A.t) : 'b tr A.t =
+    traverse_with_addr t f (fun _ _ -> A.return ()) []
+
+  (** Traverse a nesting with address in scope *)
+  let traverse_nst_with_addr (n : 'a nst)
+      ~f:(f : 'a -> addr -> 'b A.t) : 'b nst A.t =
+    traverse_with_addr n f f [] 
+
+  (* (\** Traverse with local derivative in scope *\)
+   * let rec traverse_with_deriv : 'a 'b 'c. 'a tree ->
+   *   ('a -> 'b tr_deriv -> 'c A.t) -> 'c tree A.t = fun t f ->
+   *   let open AppSyntax(A) in 
+   *   match t with
+   *   | Lf -> A.return Lf
+   *   | Nd (a,sh) ->
+   *     let+ b = f a (sh_deriv sh)
+   *     and+ sh' = traverse sh
+   *         (fun br -> traverse_with_deriv br f)
+   *     in Nd (b,sh') *)
+
+  (* FIXME: Actually, the derivative here should really be lazy, since
+     most of the time we don't actually use it.... *)
+  
+  (* (\** Traverse with both addres and local derivative
+   *     in scope *\)
+   * let traverse_with_addr_and_deriv : 'a 'b 'c. 'a tree 
+   *   -> ('a -> addr -> 'b tr_deriv -> 'c A.t)
+   *   -> 'c tree A.t = fun t f -> 
+   *   let open AppSyntax(A) in 
+   *   let rec go t addr =
+   *     match t with
+   *     | Lf -> A.return Lf
+   *     | Nd (a,sh) ->
+   *       let+ b = f a addr (sh_deriv sh)
+   *       and+ sh' = traverse_with_addr sh
+   *           (fun br dir -> go br ((Dir dir)::addr))
+   *       in Nd (b,sh')
+   *       
+   *   in go t [] *)
+    
+end
+
+(*****************************************************************************)
 (*                       Folding, Grafting and Joining                       *)
 (*****************************************************************************)
 
@@ -288,7 +429,7 @@ let rec split_with_addr_and_deriv : 'a 'b 'c 'd.
     let (csh,dsh) =
       split_with_addr_and_deriv ash []
         (fun br dir _ ->
-           split_with_addr_and_deriv br ((Dir dir)::addr) f) in
+           split_with_addr_and_deriv br (dir <| addr) f) in
     (Nd (c,csh), Nd (d,dsh))
 
 let rec idt_fold (t : ('a, 'b) idt)
@@ -316,7 +457,7 @@ let rec idt_fold (t : ('a, 'b) idt)
       | Nd (Lf b, hs) ->
         let (csh,atr) = split_with_addr_and_deriv hs []
             (fun sh dir der ->
-               fold_pass lf nd sh ((Dir dir) :: addr) der) in
+               fold_pass lf nd sh (dir <| addr) der) in
         let c = lf b addr in 
         (Nd (c,csh), idt_join atr)
       | Nd (Nd (a,vs), hs) ->
@@ -347,7 +488,7 @@ let rec idt_fold (t : ('a, 'b) idt)
       match v with
       | Lf b ->
         let atr = map_tr_with_addr h
-            ~f:(fun _ dir -> [Dir dir]) in
+            ~f:(fun _ dir -> dir <| []) in
         let c = lf b [] in
         init_horizontal a lf nd h (c,atr) 
       | Nd (a, Lf _) ->
@@ -370,6 +511,30 @@ and idt_join : 'a 'b. (('a , 'b) idt , 'b) idt -> ('a, 'b) idt =
   | Nd (t, tsh) ->
     idt_graft t
       (map_tr tsh ~f:idt_join)
+
+(*****************************************************************************)
+(*                               Shell Extents                               *)
+(*****************************************************************************)
+
+(* I think this could be simplified if the fold routine was extended
+   to have derivatives.  This clearly would have the advantage that
+   one could calculate the canopy of a tree with a single fold, right?
+   Anyway ....
+*)
+      
+let extents (sh : 'a tr tr) : addr tr =
+
+  let rec go : 'a tr tr -> addr -> addr tr =
+    fun sh addr -> 
+    let jsh = map_tr_with_addr_and_deriv sh
+        ~f:(fun br dir rho ->
+            match br with
+            | Lf _ -> plug_idt_deriv (Lazy.force rho) (dir <| addr)
+            | Nd (_, sh') -> go sh' (dir <| addr)) in 
+    idt_join jsh
+
+  in go sh [] 
+
 
 (*****************************************************************************)
 (*                     Utils for Encoding Lists and Trees                    *)
@@ -397,72 +562,80 @@ module IdtConv = struct
       let trs = List.map brs ~f:of_planar_tr in 
       Nd (x, of_list trs)
 
+  (***************************************************************************)
+  (*                             Tree Expressions                            *)
+  (***************************************************************************)
+
+  (* FIXME: naming could use some cleanup here ... *)
+        
+  (** possibly ill-typed tree expressions *)
+  type 'a tr_expr =
+    | UnitE
+    | ValueE of 'a 
+    | LeafE of 'a tr_expr
+    | NodeE of 'a tr_expr * 'a tr_expr
+
+  exception TreeExprError of string
+      
+  let to_unit (t : 'a tr_expr) : unit = 
+    match t with
+    | UnitE -> ()
+    | _ -> raise (TreeExprError "Expected a unit")
+
+  let to_value (t : 'a tr_expr) : 'a =
+    match t with
+    | ValueE a -> a
+    | _ -> raise (TreeExprError "Expected a value")
+
+  let rec to_idt : 'a 'b 'c. 'c tr_expr
+    -> ('c tr_expr -> 'a)
+    -> ('c tr_expr -> 'b)
+    -> ('a, 'b) idt = fun t nd lf ->
+    match t with
+    | UnitE -> raise (TreeExprError "Unit is not a tree")
+    | ValueE _ -> raise (TreeExprError "Value is not a tree")
+    | LeafE t' -> Lf (lf t')
+    | NodeE (t',sh') ->
+      let a = nd t' in
+      let sh = to_idt sh' 
+          (fun br -> to_idt br nd lf)
+          to_unit in
+      Nd (a,sh)
+
+  let to_nst (t : 'a tr_expr) : 'a nst =
+    to_idt t to_value to_value
+      
+  let rec of_idt : 'a 'b 'c. ('a, 'b) idt
+    -> ('a -> 'c tr_expr)
+    -> ('b -> 'c tr_expr)
+    -> 'c tr_expr = fun t nd lf ->
+    match t with
+    | Lf b -> lf b
+    | Nd (a,sh) ->
+      let sh_expr =
+        of_idt sh
+          (fun br -> of_idt br nd lf) 
+          (fun _ -> UnitE) in 
+      NodeE (nd a, sh_expr)
+
+  let of_nst (n : 'a nst) : 'a tr_expr =
+    let mk_val a = ValueE a in 
+    of_idt n mk_val mk_val
+  
+  (* let rec to_cmplx (s : tr_expr suite) : expr cmplx =
+   *   match s with
+   *   | Emp -> failwith "empty suite"
+   *   | Ext (Emp,t) -> Base (to_expr_nst t)
+   *   | Ext (s',t) ->  Adjoin (to_cmplx s', to_expr_nst t) *)
+  
+  (* let rec from_cmplx (c : expr cmplx) : tr_expr suite =
+   *   match c with
+   *   | Base n -> Ext (Emp, from_expr_nst n)
+   *   | Adjoin (frm,n) ->
+   *     Ext (from_cmplx frm, from_expr_nst n) *)
+
+  
 end
 
 
-(*****************************************************************************)
-(*                          Tree Traversal Routines                          *)
-(*****************************************************************************)
 
-(* module TreeTraverse (A : Base.Applicative.Basic) = struct
- * 
- *   open TreeZipper
- *   
- *   (\** Basic tree traversal *\)
- *   let rec traverse : 'a 'b. 'a tree -> ('a -> 'b A.t) -> 'b tree A.t =
- *     fun t f -> let open AppSyntax(A) in 
- *       match t with
- *       | Lf -> A.return Lf
- *       | Nd (a,sh) ->
- *         let+ b = f a
- *         and+ sh' = traverse sh (fun br -> traverse br f)
- *         in Nd (b,sh')
- * 
- *   (\** Traverse with address in scope *\)
- *   let rec traverse_with_addr : 'a 'b. 'a tree ->
- *     ('a -> addr -> 'b A.t) -> 'b tree A.t = fun t f -> 
- *     let open AppSyntax(A) in 
- *     let rec go t addr =
- *       match t with
- *       | Lf -> A.return Lf
- *       | Nd (a,sh) ->
- *         let+ b = f a addr
- *         and+ sh' = traverse_with_addr sh
- *             (fun br dir -> go br ((Dir dir)::addr))
- *         in Nd (b,sh')
- *         
- *     in go t []
- * 
- *   (\** Traverse with local derivative in scope *\)
- *   let rec traverse_with_deriv : 'a 'b 'c. 'a tree ->
- *     ('a -> 'b tr_deriv -> 'c A.t) -> 'c tree A.t = fun t f ->
- *     let open AppSyntax(A) in 
- *     match t with
- *     | Lf -> A.return Lf
- *     | Nd (a,sh) ->
- *       let+ b = f a (sh_deriv sh)
- *       and+ sh' = traverse sh
- *           (fun br -> traverse_with_deriv br f)
- *       in Nd (b,sh')
- * 
- *   (\* FIXME: Actually, the derivative here should really be lazy, since
- *      most of the time we don't actually use it.... *\)
- *   
- *   (\** Traverse with both addres and local derivative
- *       in scope *\)
- *   let traverse_with_addr_and_deriv : 'a 'b 'c. 'a tree 
- *     -> ('a -> addr -> 'b tr_deriv -> 'c A.t)
- *     -> 'c tree A.t = fun t f -> 
- *     let open AppSyntax(A) in 
- *     let rec go t addr =
- *       match t with
- *       | Lf -> A.return Lf
- *       | Nd (a,sh) ->
- *         let+ b = f a addr (sh_deriv sh)
- *         and+ sh' = traverse_with_addr sh
- *             (fun br dir -> go br ((Dir dir)::addr))
- *         in Nd (b,sh')
- *         
- *     in go t []
- *     
- * end *)

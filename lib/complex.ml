@@ -106,11 +106,26 @@ let rec compress_with
 
 exception CmplxZipperError of string
 
+let head_zip (z : 'a cmplx_zipper) : 'a nst_zipper =
+  match z with
+  | BaseZip nz -> nz
+  | AdjoinZip (_,nz) -> nz
+
+let tail_zip (z : 'a cmplx_zipper) : 'a cmplx_zipper =
+  match z with
+  | BaseZip _ -> raise (ShapeError "tail zip on base")
+  | AdjoinZip (tl,_) -> tl
+    
 let focus_of (z : 'a cmplx_zipper) : 'a nst =
   match z with
   | BaseZip ((n,_)) -> n 
   | AdjoinZip (_,(n,_)) -> n
 
+let with_head_zip (z : 'a cmplx_zipper) (n : 'a nst_zipper) : 'a cmplx_zipper =
+  match z with 
+  | BaseZip _ -> BaseZip n
+  | AdjoinZip (fz,_) -> AdjoinZip (fz,n)
+  
 let with_focus (z : 'a cmplx_zipper) (n : 'a nst) : 'a cmplx_zipper =
   match z with
   | BaseZip ((_,g)) -> BaseZip ((n,g))
@@ -174,6 +189,41 @@ let focus_face (z : 'a cmplx_zipper) : 'a cmplx =
     
     Adjoin (with_head frm hd', Lf (base_value n))
 
+let rec close_cmplx (z : 'a cmplx_zipper) : 'a cmplx =
+  match z with
+  | BaseZip nz ->
+    Base (close nz)
+  | AdjoinZip (fz,nz) ->
+    Adjoin (close_cmplx fz, close nz)
+
+let rec visit_cmplx (z : 'a cmplx_zipper) (dir : dir) : 'a cmplx_zipper =
+  match (z, dir) with
+  | (BaseZip nz,_) -> BaseZip (visit nz dir)
+  | (AdjoinZip (fz, nz), Dir []) ->
+    (* We are entering a box at the root.  The lower
+       dimensions will not change, so just visit in 
+       the head zipper and return.
+    *)
+    AdjoinZip (fz, visit nz dir)
+  | (_, Dir (d::ds)) ->
+    
+    let zp = visit_cmplx z (Dir ds) in
+    let sib = sibling (head_zip zp) d in
+    let sp = focus_spine zp in
+    begin match sp with
+      | Lf _ -> with_head_zip zp sib
+      | Nd (_,sh) ->
+        let exts = extents sh in
+        let addr = element_at exts (addr_of d) in
+        let ntl = seek_cmplx (tail_zip zp) addr in
+        AdjoinZip (ntl,sib)
+    end
+  
+and seek_cmplx (z : 'a cmplx_zipper) (addr : addr) : 'a cmplx_zipper =
+  match addr with
+  | [] -> z
+  | (d::ds) ->
+    visit_cmplx (seek_cmplx z ds) d 
 
 (*****************************************************************************)
 (*                             Old Bond Checking                             *)
