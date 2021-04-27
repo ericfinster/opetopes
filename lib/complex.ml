@@ -62,6 +62,22 @@ let map_cmplx_with_addr (c : 'a cmplx)
   in go c 0 
 
 (*****************************************************************************)
+(*                              Pretty Printing                              *)
+(*****************************************************************************)
+
+let rec pp_cmplx_raw (pp_a : 'a Fmt.t) : 'a cmplx Fmt.t =
+  fun ppf c ->
+  match c with
+  | Base n ->
+    Fmt.pf ppf "~> @[%a@]" (pp_nst pp_a) n
+  | Adjoin (f,n) ->
+    Fmt.pf ppf "%a@,|> @[%a@]"
+      (pp_cmplx_raw pp_a) f (pp_nst pp_a) n
+
+let pp_cmplx (pp_a : 'a Fmt.t) : 'a cmplx Fmt.t =
+  Fmt.vbox (pp_cmplx_raw pp_a)
+
+(*****************************************************************************)
 (*                         Complex Zipper Operations                         *)
 (*****************************************************************************)
 

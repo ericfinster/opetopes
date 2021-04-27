@@ -138,6 +138,27 @@ let is_corolla (t : ('a, 'b) idt) : bool =
   | Nd (_, sh) -> List.for_all (nodes sh) ~f:is_leaf
 
 (*****************************************************************************)
+(*                              Pretty Printing                              *)
+(*****************************************************************************)
+
+let rec pp_idt : 'a 'b. 'a Fmt.t -> 'b Fmt.t
+  -> ('a, 'b) idt Fmt.t =
+  fun pp_a pp_b ppf t ->
+  match t with
+  | Lf b -> Fmt.pf ppf "Lf @[%a@]" pp_b b
+  | Nd (a,sh) -> 
+    Fmt.pf ppf "Nd (@[%a@],@, @[%a@])"
+      pp_a a (pp_tr (pp_idt pp_a pp_b)) sh
+
+and pp_tr : 'a. 'a Fmt.t -> 'a tr Fmt.t =
+  fun pp_a ppf t ->
+  pp_idt pp_a (Fmt.any "()") ppf t 
+
+let pp_nst : 'a Fmt.t -> 'a nst Fmt.t =
+  fun pp_a ppf n ->
+  pp_idt pp_a pp_a ppf n 
+
+(*****************************************************************************)
 (*                          Zippers and Derivatives                          *)
 (*****************************************************************************)
 
