@@ -96,6 +96,9 @@ let map_with_addr (t : ('a , 'b) idt)
 let map_tr_with_addr (t : 'a tr) ~f:(f : 'a -> addr -> 'b) : 'b tr =
   map_with_addr t ~nd:f ~lf:(fun _ _ -> ())
 
+let map_nst_with_addr (t : 'a nst) ~f:(f : 'a -> addr -> 'b) : 'b nst =
+  map_with_addr t ~nd:f ~lf:f
+
 (** extract the value at the root of the tree *)
 let root_value : ('a , 'b) idt -> 'a =
   function
@@ -725,7 +728,6 @@ module IdtConv = struct
    *   | Base n -> Ext (Emp, from_expr_nst n)
    *   | Adjoin (frm,n) ->
    *     Ext (from_cmplx frm, from_expr_nst n) *)
-
   
 end
 

@@ -16,10 +16,6 @@ let (~>) n = Base n
 (* aiee ... used as function applicaton? *)
 let (|>) t h = Adjoin (t,h)
 
-type 'a cmplx_zipper =
-  | BaseZip of 'a nst_zipper
-  | AdjoinZip of 'a cmplx_zipper * 'a nst_zipper
-
 let rec map_cmplx (c : 'a cmplx) ~f:(f : 'a -> 'b) : 'b cmplx =
   match c with
   | Base obs -> Base (map_nst obs ~f:f)
@@ -32,27 +28,52 @@ let head_of (c : 'a cmplx) : 'a nst =
   match c with 
   | Base n -> n
   | Adjoin (_,n) -> n
+
+let tail_of (c : 'a cmplx) : 'a cmplx =
+  match c with
+  | Base _ -> raise (ShapeError "tail of base complex")
+  | Adjoin (c',_) -> c'
     
 let with_head (c : 'a cmplx) (n : 'a nst) : 'a cmplx =
   match c with
   | Base _ -> Base n
   | Adjoin (frm,_) -> Adjoin (frm,n)
 
+let rec labels (c : 'a cmplx) : 'a list =
+  match c with
+  | Base n -> nst_labels n
+  | Adjoin (tl,hd) ->
+    List.append (nst_labels hd) (labels tl)
+
+(* face addresses *)
+type face_addr = int * addr
+                 
+let map_cmplx_with_addr (c : 'a cmplx)
+    ~f:(f : 'a -> face_addr -> 'b) : 'b cmplx =
+
+  let rec go c codim =
+    let do_map n = map_nst_with_addr n
+        ~f:(fun a addr -> f a (codim,addr)) in 
+    match c with
+    | Base n -> Base (do_map n)
+    | Adjoin (c',n) ->
+      Adjoin (go c' (codim+1), do_map n)
+
+  in go c 0 
+
+(*****************************************************************************)
+(*                         Complex Zipper Operations                         *)
+(*****************************************************************************)
+
+type 'a cmplx_zipper =
+  | BaseZip of 'a nst_zipper
+  | AdjoinZip of 'a cmplx_zipper * 'a nst_zipper
+
 let rec mk_cmplx_zipper (c : 'a cmplx) : 'a cmplx_zipper =
   match c with
   | Base n -> BaseZip (mk_zipper n)
   | Adjoin (frm,n) ->
     AdjoinZip (mk_cmplx_zipper frm, mk_zipper n) 
-
-let rec labels (c : 'a cmplx) : 'a list =
-  match c with
-  | Base n -> nodes n
-  | Adjoin (tl,hd) ->
-    List.append (nst_labels hd) (labels tl)
-
-(*****************************************************************************)
-(*                         Complex Zipper Operations                         *)
-(*****************************************************************************)
 
 exception CmplxZipperError of string
 
@@ -175,6 +196,18 @@ and seek_cmplx (z : 'a cmplx_zipper) (addr : addr) : 'a cmplx_zipper =
   | (d::ds) ->
     visit_cmplx (seek_cmplx z ds) d 
 
+let rec face_at (c : 'a cmplx) (fa : face_addr) : 'a cmplx =
+  if (fst fa <= 0) then
+    focus_face (seek_cmplx (mk_cmplx_zipper c) (snd fa))
+  else face_at (tail_of c) (fst fa - 1, snd fa)
+
+let face_cmplx (c : 'a cmplx) : 'a cmplx cmplx =
+  map_cmplx_with_addr c
+    ~f:(fun _ fa -> face_at c fa)
+
+let faces (c : 'a cmplx) : 'a cmplx list =
+  labels (face_cmplx c)
+    
 (*****************************************************************************)
 (*                             Complex Validation                            *)
 (*****************************************************************************)
