@@ -56,11 +56,11 @@ let map (t : ('a , 'b) idt) ~nd:(nd : 'a -> 'c) ~lf:(lf : 'b -> 'd) : ('c , 'd) 
       match t with
       | Lf b -> Lf (l b)
       | Nd (a,sh) ->
-        let a' = n a in
         let sh' = go sh
             (fun br -> go br n l)
-            (fun _ -> ())
-        in Nd (a',sh') 
+            (fun _ -> ()) in 
+        let a' = n a in
+        Nd (a',sh') 
   in go t nd lf
 
 (** [map] specialized for trees *)

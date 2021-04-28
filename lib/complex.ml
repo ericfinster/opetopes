@@ -259,3 +259,13 @@ let validate_opetope (c : 'a cmplx) : unit =
   | _ -> raise (ShapeError "Opetopic complex is not closed")
 
 
+(*****************************************************************************)
+(*                                 Labelling                                 *)
+(*****************************************************************************)
+
+let numerate (c : 'a cmplx) : int cmplx =
+  let i = ref 0 in
+  map_cmplx c 
+    ~f:(fun _ -> let v = ! i in
+         i := v + 1; v)
+  
