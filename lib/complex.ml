@@ -25,7 +25,12 @@ let rec is_base (c : 'a cmplx) : bool =
   match c with
   | Base _ -> true
   | _ -> false
-    
+
+let top_value (c : 'a cmplx) : 'a =
+  match c with
+  | Base n -> base_value n
+  | Adjoin (_,n) -> base_value n
+                      
 let rec map_cmplx (c : 'a cmplx) ~f:(f : 'a -> 'b) : 'b cmplx =
   match c with
   | Base obs -> Base (map_nst obs ~f:f)
