@@ -16,6 +16,16 @@ let (~>) n = Base n
 (* aiee ... used as function applicaton? *)
 let (|>) t h = Adjoin (t,h)
 
+let rec dim_cmplx (c : 'a cmplx) : int =
+  match c with
+  | Base _ -> 0
+  | Adjoin (c',_) -> dim_cmplx c' + 1
+
+let rec is_base (c : 'a cmplx) : bool =
+  match c with
+  | Base _ -> true
+  | _ -> false
+    
 let rec map_cmplx (c : 'a cmplx) ~f:(f : 'a -> 'b) : 'b cmplx =
   match c with
   | Base obs -> Base (map_nst obs ~f:f)
