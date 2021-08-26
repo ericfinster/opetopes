@@ -21,7 +21,7 @@ let rec dim_cmplx (c : 'a cmplx) : int =
   | Base _ -> 0
   | Adjoin (c',_) -> dim_cmplx c' + 1
 
-let rec is_base (c : 'a cmplx) : bool =
+let is_base (c : 'a cmplx) : bool =
   match c with
   | Base _ -> true
   | _ -> false
@@ -263,16 +263,17 @@ let rec validate_bonds (c : 'a cmplx) : 'a tr * 'a tr_deriv =
 
 let validate (c : 'a cmplx) : unit =
   let _ = validate_bonds c in ()
-                              
+
+let validate_frame (c : 'a cmplx) : unit =
+  let (c,_) = validate_bonds c in
+  if (is_corolla c) then ()
+  else raise (ShapeError "Boundary is not a corolla")
+
 let validate_opetope (c : 'a cmplx) : unit = 
   match c with
   | Base (Lf _) -> ()
-  | Adjoin (f, Lf _) -> 
-    let (c,_) = validate_bonds f in
-    if (is_corolla c) then ()
-    else raise (ShapeError "Boundary is not a corolla")
+  | Adjoin (f, Lf _) -> validate_frame f
   | _ -> raise (ShapeError "Opetopic complex is not closed")
-
 
 (*****************************************************************************)
 (*                                 Labelling                                 *)
