@@ -76,6 +76,51 @@ let map_cmplx_with_addr (c : 'a cmplx)
 
   in go c 0 
 
+
+(*****************************************************************************)
+(*                             Complex Traversal                             *)
+(*****************************************************************************)
+
+module ComplexTraverse (A : Applicative.Basic) = struct
+
+  module AI = Applicative.Make(A)
+  module TT = TreeTraverse(A) 
+  
+  module AppSyntax = struct
+    let (let+) x f = AI.map ~f:f x
+    let (and+) p q = AI.both p q 
+  end
+
+  let rec traverse_cmplx (c : 'a cmplx) ~f:(f : 'a -> 'b A.t) : 'b cmplx A.t =
+    let open AppSyntax in 
+    match c with
+    | Base n ->
+      let+ n' = TT.traverse_nst n ~f:f in 
+      Base n'
+    | Adjoin (t,n) -> 
+      let+ t' = traverse_cmplx t ~f:f 
+      and+ n' = TT.traverse_nst n ~f:f in
+      Adjoin (t',n')
+
+  let traverse_cmplx_with_addr (c : 'a cmplx)
+      ~f:(f : 'a -> face_addr -> 'b A.t) : 'b cmplx A.t =
+    let open AppSyntax in
+    let rec go c codim = 
+      match c with
+      | Base n ->
+        let+ n' = TT.traverse_nst_with_addr n
+            ~f:(fun a addr -> f a (codim,addr)) in
+        Base n'
+      | Adjoin (t,n) ->
+        let+ t' = go t (codim+1) 
+        and+ n' = TT.traverse_nst_with_addr n
+            ~f:(fun a addr -> f a (codim,addr)) in
+        Adjoin (t',n')
+
+    in go c 0 
+  
+end
+
 (*****************************************************************************)
 (*                              Pretty Printing                              *)
 (*****************************************************************************)
