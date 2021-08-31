@@ -775,8 +775,8 @@ module IdtConv = struct
       NodeE (nd a, sh_expr)
 
   let of_nst (n : 'a nst) : 'a tr_expr =
-    let mk_val a = ValueE a in 
-    of_idt n mk_val mk_val
+    of_idt n (fun a -> ValueE a)
+      (fun a -> LeafE (ValueE a))
   
   let rec pp_tr_expr pp_a ppf t =
     match t with
