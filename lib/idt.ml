@@ -471,6 +471,20 @@ module TreeTraverse (A : Applicative.Basic) = struct
     
 end
 
+(* I cannot get the Base functor system to work, so I'm putting 
+   this default instance here for options even though, in principle,
+   you should be able to define it on the fly .... *)
+module OptionTraverse = TreeTraverse(struct
+    type 'a t = 'a option
+    let map = `Custom Option.map
+    let return = Option.return
+    let apply og oa =
+      match (og,oa) with
+      | (None,_) -> None
+      | (_, None) -> None
+      | (Some g,Some a) -> Some (g a)
+  end)
+
 (*****************************************************************************)
 (*                       Folding, Grafting and Joining                       *)
 (*****************************************************************************)
