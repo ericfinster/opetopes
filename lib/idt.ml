@@ -411,6 +411,15 @@ module TreeTraverse (A : Applicative.Basic) = struct
       ~f:(f : 'a -> addr -> 'b A.t) : 'b nst A.t =
     traverse_with_addr n f f [] 
 
+  let sequence (t : ('a A.t , 'b A.t) idt) : ('a , 'b) idt A.t =
+    traverse t (fun x -> x) (fun x -> x)
+
+  let seqeunce_tr (t : 'a A.t tr) : 'a tr A.t =
+    traverse t (fun x -> x) (fun _ -> A.return ())
+
+  let sequence_nst (n : 'a A.t nst) : 'a nst A.t =
+    traverse n (fun x -> x) (fun x -> x) 
+  
   (* (\** Traverse with local derivative in scope *\)
    * let rec traverse_with_deriv : 'a 'b 'c. 'a tree ->
    *   ('a -> 'b tr_deriv -> 'c A.t) -> 'c tree A.t = fun t f ->
