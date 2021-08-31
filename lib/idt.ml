@@ -352,6 +352,55 @@ let match_shape (u : ('a,'b) idt) (v : ('c,'d) idt) : unit =
       ~nd:(fun _ _ _ -> ())
       ~lf:(fun _ _ -> ()) in ()
 
+
+(*****************************************************************************)
+(*                          Applicative Instance                             *)
+(*****************************************************************************)
+
+module TreeBasic =
+struct
+
+  type 'a t = 'a tr
+
+  let return a = Nd (a, Lf ())
+  let map = `Custom map_tr
+  let rec apply : 'a 'b. ('a -> 'b , unit) idt
+    -> ('a , unit) idt
+    -> ('b , unit) idt =
+    fun f t -> 
+    match (f,t) with
+    | (Lf (),_) -> Lf ()
+    | (_,Lf ()) -> Lf () 
+    | (Nd (f,fsh),Nd(a,ash)) ->
+      let fsh' = map_tr fsh ~f:apply in 
+      (Nd (f a , apply fsh' ash))
+    
+end
+
+module NestingBasic =
+struct
+  
+  type 'a t = 'a nst
+
+  let return a = Lf a
+  let map = `Custom map_nst
+  let rec apply : 'a 'b. ('a -> 'b) nst 
+    -> 'a nst -> 'b nst = 
+    fun nf t -> 
+    match (nf,t) with
+    | (Lf f , Lf a) -> Lf (f a)
+    | (Lf f, Nd (a,_)) -> Lf (f a)
+    | (Nd (f,_), Lf a) -> Lf (f a)
+    | (Nd (f,fsh),Nd(a,ash)) ->
+      let fsh' = map_tr fsh ~f:apply in 
+      (Nd (f a , TreeBasic.apply fsh' ash))
+
+end
+
+module TreeApplicative = Applicative.Make(TreeBasic)
+module NestingApplicative = Applicative.Make(NestingBasic)
+
+
 (*****************************************************************************)
 (*                          Tree Traversal Routines                          *)
 (*****************************************************************************)
@@ -419,38 +468,6 @@ module TreeTraverse (A : Applicative.Basic) = struct
 
   let sequence_nst (n : 'a A.t nst) : 'a nst A.t =
     traverse n (fun x -> x) (fun x -> x) 
-  
-  (* (\** Traverse with local derivative in scope *\)
-   * let rec traverse_with_deriv : 'a 'b 'c. 'a tree ->
-   *   ('a -> 'b tr_deriv -> 'c A.t) -> 'c tree A.t = fun t f ->
-   *   let open AppSyntax(A) in 
-   *   match t with
-   *   | Lf -> A.return Lf
-   *   | Nd (a,sh) ->
-   *     let+ b = f a (sh_deriv sh)
-   *     and+ sh' = traverse sh
-   *         (fun br -> traverse_with_deriv br f)
-   *     in Nd (b,sh') *)
-
-  (* FIXME: Actually, the derivative here should really be lazy, since
-     most of the time we don't actually use it.... *)
-  
-  (* (\** Traverse with both addres and local derivative
-   *     in scope *\)
-   * let traverse_with_addr_and_deriv : 'a 'b 'c. 'a tree 
-   *   -> ('a -> addr -> 'b tr_deriv -> 'c A.t)
-   *   -> 'c tree A.t = fun t f -> 
-   *   let open AppSyntax(A) in 
-   *   let rec go t addr =
-   *     match t with
-   *     | Lf -> A.return Lf
-   *     | Nd (a,sh) ->
-   *       let+ b = f a addr (sh_deriv sh)
-   *       and+ sh' = traverse_with_addr sh
-   *           (fun br dir -> go br ((Dir dir)::addr))
-   *       in Nd (b,sh')
-   *       
-   *   in go t [] *)
     
 end
 
