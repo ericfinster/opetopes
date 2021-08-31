@@ -56,9 +56,9 @@ let with_head (c : 'a cmplx) (n : 'a nst) : 'a cmplx =
 
 let rec labels (c : 'a cmplx) : 'a list =
   match c with
-  | Base n -> nst_labels n
+  | Base n -> nodes_nst n
   | Adjoin (tl,hd) ->
-    List.append (nst_labels hd) (labels tl)
+    List.append (nodes_nst hd) (labels tl)
 
 (* face addresses *)
 type face_addr = int * addr

@@ -626,12 +626,12 @@ let extents (sh : 'a tr tr) : addr tr =
 (*                           Operations on Nestings                          *)
 (*****************************************************************************)
     
-let rec nst_labels : 'a. 'a nst -> 'a list =
+let rec nodes_nst : 'a. 'a nst -> 'a list =
   fun n -> 
   match n with
   | Lf a -> [a]
   | Nd (a,sh) ->
-    let brs = map_tr sh ~f:nst_labels in
+    let brs = map_tr sh ~f:nodes_nst in
     let brs_nds = List.concat (nodes brs) in 
     a :: brs_nds
 
