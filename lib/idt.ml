@@ -778,17 +778,21 @@ module IdtConv = struct
     let mk_val a = ValueE a in 
     of_idt n mk_val mk_val
   
-  (* let rec to_cmplx (s : tr_expr suite) : expr cmplx =
-   *   match s with
-   *   | Emp -> failwith "empty suite"
-   *   | Ext (Emp,t) -> Base (to_expr_nst t)
-   *   | Ext (s',t) ->  Adjoin (to_cmplx s', to_expr_nst t) *)
-  
-  (* let rec from_cmplx (c : expr cmplx) : tr_expr suite =
-   *   match c with
-   *   | Base n -> Ext (Emp, from_expr_nst n)
-   *   | Adjoin (frm,n) ->
-   *     Ext (from_cmplx frm, from_expr_nst n) *)
+  let rec pp_tr_expr pp_a ppf t =
+    match t with
+    | UnitE -> Fmt.pf ppf "tt"
+    | ValueE a -> Fmt.pf ppf "{ %a }" pp_a a
+    | LeafE te -> Fmt.pf ppf "lf %a" (pp_tr_expr pp_a) te
+    | NodeE (te,sh) ->
+      Fmt.pf ppf "nd %a %a"
+        (pp_tr_expr_parens pp_a te) te
+        (pp_tr_expr_parens pp_a te) sh 
+
+  and pp_tr_expr_parens pp_a te =
+    match te with
+    | LeafE _ -> Fmt.parens (pp_tr_expr pp_a)
+    | NodeE _ -> Fmt.parens (pp_tr_expr pp_a)
+    | _ -> pp_tr_expr pp_a
   
 end
 
