@@ -118,7 +118,10 @@ module ComplexTraverse (A : Applicative.Basic) = struct
         Adjoin (t',n')
 
     in go c 0 
-  
+
+  let sequence (c : 'a A.t cmplx) : 'a cmplx A.t =
+    traverse_cmplx c ~f:(fun x -> x)
+      
 end
 
 (*****************************************************************************)
