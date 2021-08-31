@@ -786,7 +786,7 @@ module IdtConv = struct
     | NodeE (te,sh) ->
       Fmt.pf ppf "nd %a %a"
         (pp_tr_expr_parens pp_a te) te
-        (pp_tr_expr_parens pp_a te) sh 
+        (pp_tr_expr_parens pp_a sh) sh 
 
   and pp_tr_expr_parens pp_a te =
     match te with
