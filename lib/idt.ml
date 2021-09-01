@@ -159,6 +159,30 @@ let pp_nst : 'a Fmt.t -> 'a nst Fmt.t =
   pp_idt pp_a pp_a ppf n 
 
 (*****************************************************************************)
+(*                                 Equality                                  *) 
+(*****************************************************************************)
+
+let rec tr_eq : 'a.
+  ('a -> 'a -> bool)
+  -> 'a tr -> 'a tr -> 'bool =
+  fun eq ta tb -> 
+  match (ta, tb) with
+  | (Lf _ , Lf _) -> true
+  | (Nd (a, ash), Nd (b,bsh)) ->
+    (eq a b) && (tr_eq (tr_eq eq) ash bsh)
+  | _ -> false 
+      
+let rec nst_eq : 'a. 
+  ('a -> 'a -> bool)
+  -> 'a nst -> 'a nst -> 'bool =
+  fun eq na nb ->
+  match (na,nb) with
+  | (Lf a, Lf b) -> eq a b
+  | (Nd (a, ash), Nd (b,bsh)) ->
+    (eq a b) && (tr_eq (nst_eq eq) ash bsh)
+  | _ -> false 
+
+(*****************************************************************************)
 (*                          Zippers and Derivatives                          *)
 (*****************************************************************************)
 

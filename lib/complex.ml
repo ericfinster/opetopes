@@ -76,6 +76,17 @@ let map_cmplx_with_addr (c : 'a cmplx)
 
   in go c 0 
 
+(*****************************************************************************)
+(*                                 Equality                                  *)
+(*****************************************************************************)
+
+let rec cmplx_eq (eq : 'a -> 'a -> bool)
+    (ca : 'a cmplx) (cb : 'a cmplx) : bool =
+  match (ca,cb) with
+  | (Base na , Base nb) -> nst_eq eq na nb
+  | (Adjoin (ta,na) , Adjoin (tb,nb)) ->
+     cmplx_eq eq ta tb && nst_eq eq na nb
+  | _ -> false 
 
 (*****************************************************************************)
 (*                             Complex Traversal                             *)
