@@ -169,7 +169,9 @@ let rec tr_eq : 'a.
   match (ta, tb) with
   | (Lf _ , Lf _) -> true
   | (Nd (a, ash), Nd (b,bsh)) ->
-    (eq a b) && (tr_eq (tr_eq eq) ash bsh)
+    if (eq a b) then
+      tr_eq (tr_eq eq) ash bsh
+    else false
   | _ -> false 
       
 let rec nst_eq : 'a. 
@@ -179,7 +181,9 @@ let rec nst_eq : 'a.
   match (na,nb) with
   | (Lf a, Lf b) -> eq a b
   | (Nd (a, ash), Nd (b,bsh)) ->
-    (eq a b) && (tr_eq (nst_eq eq) ash bsh)
+    if (eq a b) then
+      tr_eq (nst_eq eq) ash bsh
+    else false
   | _ -> false 
 
 (*****************************************************************************)
