@@ -625,7 +625,16 @@ let extents (sh : 'a tr tr) : addr tr =
 (*****************************************************************************)
 (*                           Operations on Nestings                          *)
 (*****************************************************************************)
-    
+
+let rec unzip_nst : ('a * 'b) nst -> ('a nst * 'b nst) =
+  fun n ->
+  match n with
+  | Lf (a,b) -> (Lf a, Lf b)
+  | Nd ((a,b),sh) ->
+    let sh' = map_tr sh ~f:unzip_nst in
+    let (ash,bsh) = idt_unzip sh' in 
+    (Nd (a,ash) , Nd (b,bsh))
+
 let rec nodes_nst : 'a. 'a nst -> 'a list =
   fun n -> 
   match n with
