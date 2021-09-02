@@ -677,6 +677,11 @@ let base_value (n : 'a nst) : 'a =
   | Lf a -> a
   | Nd (a,_) -> a
 
+let with_base_value (n : 'a nst) (a : 'a) : 'a nst =
+  match n with
+  | Lf _ -> Lf a
+  | Nd (_,sh) -> Nd (a, sh)
+
 let rec spine (n : 'a nst) (d : 'a lazy_tr_deriv) : 'a tr =
   match n with
   | Lf a -> plug_idt_deriv (Lazy.force d) a

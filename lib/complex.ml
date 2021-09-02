@@ -299,7 +299,18 @@ let face_cmplx (c : 'a cmplx) : 'a cmplx cmplx =
 
 let faces (c : 'a cmplx) : 'a cmplx list =
   labels (face_cmplx c)
-    
+
+let rec replace_at  (c : 'a cmplx) ((codim,addr) : face_addr) (a : 'a) : 'a cmplx =
+  if (codim <= 0) then
+    let z = seek_cmplx (mk_cmplx_zipper c) addr in
+    let z' = with_focus z (with_base_value (focus_of z) a) in
+    close_cmplx z'
+  else match c with
+    | Base _ -> raise (ShapeError "Invalid replacement address")
+    | Adjoin (t,n) ->
+      let t' = replace_at t (codim-1,addr) a in
+      Adjoin (t',n) 
+
 (*****************************************************************************)
 (*                             Complex Validation                            *)
 (*****************************************************************************)
