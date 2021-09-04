@@ -76,6 +76,17 @@ let map_cmplx_with_addr (c : 'a cmplx)
 
   in go c 0 
 
+let rec match_cmplx (c : 'a cmplx) (d : 'b cmplx)
+    ~f:(f : 'a -> 'b -> 'c) : 'c cmplx =
+  match (c , d) with
+  | (Base u, Base v) ->
+    Base (match_nst u v ~f:f)
+  | (Adjoin (s,u), Adjoin (t,v)) ->
+    let tl = match_cmplx s t ~f:f in
+    let hd = match_nst u v ~f:f in
+    Adjoin (tl,hd) 
+  | _ -> raise (ShapeError "match failed for complexes")
+
 (*****************************************************************************)
 (*                                 Equality                                  *)
 (*****************************************************************************)

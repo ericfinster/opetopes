@@ -346,6 +346,38 @@ let map_tr_with_deriv (t : 'a tr)
     ~f:(f : 'a -> 'b tr_deriv Lazy.t -> 'c) =
   map_with_deriv t ~nd:f ~lf:(fun _ -> ())
 
+
+let match_idt (u : ('a, 'b) idt) (v : ('c, 'd) idt)
+    ~nd:(nd : 'a -> 'c -> 'f)
+    ~lf:(lf : 'b -> 'd -> 'g) : ('f, 'g) idt =
+  
+  let rec go : 'a 'b 'c 'd 'e 'f 'g. 
+    ('a, 'b) idt
+    -> ('c, 'd) idt
+    -> ('a -> 'c -> 'f)
+    -> ('b -> 'd -> 'g)
+    -> ('f , 'g) idt =
+    fun u v nd lf ->
+      match (u,v) with
+      | (Lf b , Lf d) -> Lf (lf b d)
+      | (Nd (a,ash), Nd (c,csh)) ->
+        let fsh = go ash csh
+            (fun abr cbr -> go abr cbr nd lf)
+            (fun _ _ -> ()) in
+        let f = nd a c in 
+        Nd (f,fsh)
+      | _ -> raise (ShapeError "Match failed")
+
+  in go u v nd lf 
+
+let match_tr (u : 'a tr) (v : 'b tr)
+    ~f:(f : 'a -> 'b -> 'c) : 'c tr =
+  match_idt u v ~nd:f ~lf:(fun _ _ -> ())
+
+let match_nst (u : 'a nst) (v : 'b nst)
+    ~f:(f : 'a -> 'b -> 'c) : 'c nst =
+  match_idt u v ~nd:f ~lf:f 
+
 let match_with_deriv (u : ('a, 'b) idt) (v : ('c, 'd) idt)
     ~nd:(nd : 'a -> 'c -> 'e lazy_tr_deriv -> 'f)
     ~lf:(lf : 'b -> 'd -> 'g) : ('f, 'g) idt =
