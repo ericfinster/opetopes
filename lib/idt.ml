@@ -855,10 +855,10 @@ module IdtConv = struct
   let rec pp_tr_expr pp_a ppf t =
     match t with
     | UnitE -> Fmt.pf ppf "tt"
-    | ValueE a -> Fmt.pf ppf "{ %a }" pp_a a
-    | LeafE te -> Fmt.pf ppf "lf %a" (pp_tr_expr pp_a) te
+    | ValueE a -> Fmt.pf ppf "{ @[%a@] }" pp_a a
+    | LeafE te -> Fmt.pf ppf "lf @[%a@]" (pp_tr_expr pp_a) te
     | NodeE (te,sh) ->
-      Fmt.pf ppf "nd %a %a"
+      Fmt.pf ppf "nd @[%a@]@, @[%a@]"
         (pp_tr_expr_parens pp_a te) te
         (pp_tr_expr_parens pp_a sh) sh 
 
