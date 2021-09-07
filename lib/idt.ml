@@ -714,6 +714,16 @@ let with_base_value (n : 'a nst) (a : 'a) : 'a nst =
   | Lf _ -> Lf a
   | Nd (_,sh) -> Nd (a, sh)
 
+let apply_at_nst (n : 'a nst) (addr : addr) (f : 'a -> 'a) : 'a nst =
+  let (fcs,ctx) = seek_to n addr in
+  let fcs' = with_base_value fcs (f (base_value fcs)) in 
+  close (fcs',ctx)
+    
+let nodes_nst_except (n : 'a nst) (addr : addr) : 'a list =
+  let n_opt = map_nst n ~f:(fun a -> Some a) in
+  let n_rep = apply_at_nst n_opt addr (fun _ -> None) in
+  List.filter_opt (nodes_nst n_rep)
+
 let rec spine (n : 'a nst) (d : 'a lazy_tr_deriv) : 'a tr =
   match n with
   | Lf a -> plug_idt_deriv (Lazy.force d) a
