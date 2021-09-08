@@ -724,6 +724,9 @@ let nodes_nst_except (n : 'a nst) (addr : addr) : 'a list =
   let n_rep = apply_at_nst n_opt addr (fun _ -> None) in
   List.filter_opt (nodes_nst n_rep)
 
+let addr_nst (n : 'a nst) : addr nst =
+  map_nst_with_addr n ~f:(fun _ addr -> addr)
+    
 let rec spine (n : 'a nst) (d : 'a lazy_tr_deriv) : 'a tr =
   match n with
   | Lf a -> plug_idt_deriv (Lazy.force d) a
