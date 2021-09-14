@@ -695,14 +695,17 @@ let rec unzip_nst : ('a * 'b) nst -> ('a nst * 'b nst) =
     let (ash,bsh) = idt_unzip sh' in 
     (Nd (a,ash) , Nd (b,bsh))
 
-let rec nodes_nst : 'a. 'a nst -> 'a list =
-  fun n -> 
-  match n with
-  | Lf a -> [a]
-  | Nd (a,sh) ->
-    let brs = map_tr sh ~f:nodes_nst in
-    let brs_nds = List.concat (nodes brs) in 
-    a :: brs_nds
+let nodes_nst (n : 'a nst) : 'a list = 
+  let rec go : 'a. 'a nst -> 'a list =
+    fun n -> 
+      match n with
+      | Lf a -> [a]
+      | Nd (a,sh) ->
+        let brs = map_tr sh ~f:go in
+        let brs_nds = List.concat (nodes brs) in 
+        a :: brs_nds
+  (* Probably inefficient, but I want them to come out this way ... *)
+  in List.rev (go n) 
 
 let base_value (n : 'a nst) : 'a =
   match n with
