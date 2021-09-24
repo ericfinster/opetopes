@@ -327,6 +327,15 @@ let rec apply_at  (c : 'a cmplx) ((codim,addr) : face_addr)
 let replace_at (c : 'a cmplx) (fa : face_addr) (a : 'a) : 'a cmplx =
   apply_at c fa (fun _ -> a)
 
+let rec value_at (c : 'a cmplx) ((codim,addr) : face_addr) : 'a =
+  if (codim <= 0) then
+    let z = seek_cmplx (mk_cmplx_zipper c) addr in
+    base_value (focus_of z)
+  else match c with
+    | Base _ -> raise (ShapeError "Invalue value address")
+    | Adjoin (t,_) -> value_at t (codim,addr)
+
+
 (*****************************************************************************)
 (*                             Complex Validation                            *)
 (*****************************************************************************)
