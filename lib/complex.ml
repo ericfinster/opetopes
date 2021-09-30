@@ -56,6 +56,9 @@ let with_head (c : 'a cmplx) (n : 'a nst) : 'a cmplx =
   | Base _ -> Base n
   | Adjoin (frm,_) -> Adjoin (frm,n)
 
+let head_value (c : 'a cmplx) : 'a =
+  base_value (head_of c) 
+
 let rec labels (c : 'a cmplx) : 'a list =
   match c with
   | Base n -> nodes_nst n
