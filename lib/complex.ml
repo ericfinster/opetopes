@@ -28,6 +28,11 @@ let is_base (c : 'a cmplx) : bool =
   | Base _ -> true
   | _ -> false
 
+let is_obj (c : 'a cmplx) : bool =
+  match c with
+  | Base (Lf _) -> true
+  | _ -> false
+
 let top_value (c : 'a cmplx) : 'a =
   match c with
   | Base n -> base_value n
