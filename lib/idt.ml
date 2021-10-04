@@ -412,6 +412,37 @@ let match_shape (u : ('a,'b) idt) (v : ('c,'d) idt) : unit =
       ~nd:(fun _ _ _ -> ())
       ~lf:(fun _ _ -> ()) in ()
 
+(** match with address *)
+let match_with_addr (u : ('a, 'b) idt) (v : ('c, 'd) idt)
+    ~nd:(nd : 'a -> 'c -> addr -> 'e)
+    ~lf:(lf : 'b -> 'd -> addr -> 'f) : ('e, 'f) idt =
+  
+  let rec go : 'a 'b 'c 'd 'e 'f 'g. 
+    ('a, 'b) idt
+    -> ('c, 'd) idt -> addr 
+    -> ('a -> 'c -> addr -> 'e)
+    -> ('b -> 'd -> addr -> 'f)
+    -> ('e , 'f) idt =
+    fun u v ba nd lf ->
+      match (u,v) with
+      | (Lf b , Lf d) -> Lf (lf b d ba)
+      | (Nd (a,ash), Nd (c,csh)) ->
+        let fsh = go ash csh [] 
+            (fun abr cbr dir -> go abr cbr (Dir dir :: ba) nd lf)
+            (fun _ _ _ -> ()) in
+        let f = nd a c ba in 
+        Nd (f,fsh)
+      | _ -> raise (ShapeError "Match failed")
+
+  in go u v [] nd lf 
+
+let match_tr_with_addr (u : 'a tr) (v : 'b tr)
+    ~f:(f : 'a -> 'b -> addr -> 'c) : 'c tr =
+  match_with_addr u v ~nd:f ~lf:(fun _ _ _ -> ())
+
+let match_nst_with_addr (u : 'a nst) (v : 'b nst)
+    ~f:(f : 'a -> 'b -> addr -> 'c) : 'c nst =
+  match_with_addr u v ~nd:f ~lf:f 
 
 (*****************************************************************************)
 (*                          Applicative Instance                             *)
