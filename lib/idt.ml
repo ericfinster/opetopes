@@ -67,9 +67,15 @@ let map (t : ('a , 'b) idt) ~nd:(nd : 'a -> 'c) ~lf:(lf : 'b -> 'd) : ('c , 'd) 
 let map_tr (t : 'a tr) ~f:(f : 'a -> 'b) : 'b tr =
   map t ~nd:f ~lf:(fun _ -> ())
 
+let iter_tr (t : 'a tr) ~f:(f : 'a -> unit) : unit =
+  let _ = map_tr t ~f:f in ()
+                           
 (** [map] specialized for nestings *)
 let map_nst (n : 'a nst) ~f:(f : 'a -> 'b) : 'b nst =
   map n ~nd:f ~lf:f
+
+let iter_nst (n : 'a nst) ~f:(f : 'a -> unit) : unit =
+  let _ = map_nst n ~f:f in () 
 
 (** [map] with tree address in context *)
 let map_with_addr (t : ('a , 'b) idt)
@@ -610,9 +616,10 @@ let rec split_with_addr_and_deriv : 'a 'b 'c 'd.
            split_with_addr_and_deriv br (dir <| addr) f) in
     (Nd (c,csh), Nd (d,dsh))
 
-let rec idt_fold (t : ('a, 'b) idt)
-    ~lf:(lf : ('b -> addr -> 'c))
-    ~nd:(nd : ('a -> 'c tr -> 'c)) : 'c =
+let rec idt_fold : 'a 'b 'c. ('a, 'b) idt
+  -> ('b -> addr -> 'c)
+  -> ('a -> 'c tr -> 'c)
+  -> 'c = fun t lf nd -> 
 
   let rec idt_fold_impl : 'a 'b 'c 'd. ('a, 'b) idt
     -> ('b -> addr -> 'c)
@@ -680,8 +687,8 @@ let rec idt_fold (t : ('a, 'b) idt)
     
 and idt_graft : 'a 'b 'c. ('a, 'b) idt -> ('a, 'c) idt_shell -> ('a, 'c) idt =
   fun t sh -> idt_fold t
-    ~lf:(fun _ addr -> element_at sh addr)
-    ~nd:(fun a ash -> Nd (a, ash))
+    (fun _ addr -> element_at sh addr)
+    (fun a ash -> Nd (a, ash))
 
 and idt_join : 'a 'b. (('a , 'b) idt , 'b) idt -> ('a, 'b) idt =
   function
